@@ -16,7 +16,7 @@ PageType = Literal[
 ]
 Region = Literal["rs", "regional", "world"]
 Scope = Literal["both", "rs", "world"]
-ExtractSource = Literal["json-ld", "microdata", "meta", "markdown", "url", "images"]
+ExtractSource = Literal["json-ld", "microdata", "meta", "markdown", "images"]
 
 
 class ImageRef(BaseModel):
@@ -87,7 +87,7 @@ class ScrapedPage(BaseModel):
     final_url: str = ""
     domain: str
     region: Region = "world"
-    status: Literal["ok", "blocked", "error", "skipped"] = "ok"
+    status: Literal["ok", "blocked", "error"] = "ok"
     http_status: int | None = None
     error: str = ""
     fetched_with: Provider | None = None
