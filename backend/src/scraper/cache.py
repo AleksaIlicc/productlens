@@ -1,6 +1,5 @@
-"""On-disk JSON cache for raw provider responses plus persisted scraper runs, so
-re-running a query in the UI is free and past runs stay inspectable.
-"""
+# On-disk JSON cache for raw provider responses plus persisted runs, so
+# re-running a query is free and past runs stay inspectable.
 
 import hashlib
 import json

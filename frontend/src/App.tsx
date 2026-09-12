@@ -20,7 +20,6 @@ const STATUS_LABEL: Record<Status, string> = {
 
 const FIELD_LABEL: Record<ComparisonField, string> = {
   product_identity: 'identitet proizvoda',
-  brand: 'brend',
   shade: 'nijansa',
   volume: 'zapremina',
   ingredients: 'sastojci (INCI)',
@@ -64,9 +63,6 @@ function ProductCard({ product, label }: { product: Product; label: string }) {
           </a>
         </div>
         <h2 className="mt-2 text-base font-semibold">{product.title}</h2>
-        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-          {product.brand}
-        </p>
       </header>
 
       <div className="flex gap-2 overflow-x-auto p-4">
@@ -146,7 +142,6 @@ function ImageFactsPanel({
 }) {
   const summary = [
     ['Naziv', facts.product_name],
-    ['Brend', facts.brand],
     ['Nijansa', facts.shade],
     ['Zapremina', facts.volume],
     ['Sastojci', facts.ingredients.join(' · ')],

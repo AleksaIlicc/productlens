@@ -1,9 +1,6 @@
-"""Dedupe search hits into ranked candidates.
-
-Serbian and international shops are ranked on equal footing (the user wants both);
-.rs only gets a small tie-break bonus, and the scrape selection enforces a quota
-per side so one world can never crowd out the other.
-"""
+# Dedupe search hits into ranked candidates. Domestic and international shops
+# rank on equal footing; .rs only gets a small tie-break bonus, and the scrape
+# selection enforces a per-region quota so neither side crowds the other out.
 
 import re
 import unicodedata
@@ -174,7 +171,7 @@ STOPWORDS = {"za", "i", "sa", "na", "od", "the", "and", "with", "ml", "gr", "kom
 
 
 def fold(text: str) -> str:
-    """Diacritic-insensitive comparison: 'tečni' == 'tecni', 'Šifra' == 'sifra'."""
+    # Diacritic-insensitive: "tečni" == "tecni", "Šifra" == "sifra".
     swapped = text.replace("đ", "dj").replace("Đ", "Dj").replace("ђ", "dj")
     decomposed = unicodedata.normalize("NFKD", swapped)
     return "".join(c for c in decomposed if not unicodedata.combining(c)).lower()
@@ -358,7 +355,7 @@ def pick_to_scrape(
     min_world: int = 2,
     max_per_domain: int = 2,
 ) -> list[Candidate]:
-    """Top-n, but with domain diversity and a guaranteed share of both worlds."""
+    # Top-n, but with domain diversity and a guaranteed share per region.
     if n <= 0:
         return []
 

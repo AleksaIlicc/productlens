@@ -15,7 +15,6 @@ class ImageFinding(BaseModel):
 class ImageFacts(BaseModel):
     per_image: list[ImageFinding]
     product_name: str
-    brand: str
     shade: str
     volume: str
     ingredients: list[str]
@@ -28,7 +27,6 @@ class ImageFacts(BaseModel):
 # and a closed enum keeps the model from flagging noise outside this scope.
 ComparisonField = Literal[
     "product_identity",
-    "brand",
     "shade",
     "volume",
     "ingredients",

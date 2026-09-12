@@ -1,13 +1,10 @@
-"""Deterministic product-fact extraction. No LLM anywhere in this file.
-
-Strategy order per field: JSON-LD -> microdata -> meta/og -> markdown regex.
-Real-page notes: lilly.rs and benu.rs ship no JSON-LD at all (meta + markdown
-only), while apotekajankovic.rs, drmax.rs and notino do, so every field needs
-the whole ladder.
-"""
+# Deterministic extraction, no LLM. Per field the ladder is
+# JSON-LD -> microdata -> meta/og -> markdown regex: some shops ship no
+# JSON-LD at all (lilly.rs, benu.rs), others do (apotekajankovic.rs, notino).
 
 import json
 import re
+import unicodedata
 from html import unescape
 from typing import Any
 
@@ -17,8 +14,6 @@ LD_JSON_RE = re.compile(
     r'<script[^>]+type\s*=\s*["\']application/ld\+json["\'][^>]*>(.*?)</script>',
     re.S | re.I,
 )
-META_RE = re.compile(r"<meta\s+([^>]+?)>", re.I | re.S)
-ATTR_RE = re.compile(r'([\w:.-]+)\s*=\s*"([^"]*)"|([\w:.-]+)\s*=\s*\'([^\']*)\'')
 ITEMPROP_RE = re.compile(
     r'itemprop\s*=\s*["\']([\w:]+)["\'][^>]*?(?:content\s*=\s*["\']([^"\']*)["\'])?',
     re.I,
@@ -96,6 +91,48 @@ VARIANT_PATTERNS = (
     r"\b\d{1,2}V\b",
 )
 
+# Key fragments that mark store chrome, not product data: shops put their
+# company registration, opening hours and delivery table in the same
+# key: value shape the specs regex below looks for. Diacritics are folded
+# away before matching, so plain ASCII spellings are enough here.
+JUNK_SPEC_KEYS = (
+    "radno vreme",
+    "radnim danima",
+    "vikendom",
+    "po-pia",
+    "pon-pet",
+    "otvaraci",
+    "poslovno ime",
+    "sediste",
+    "maticni broj",
+    "pib",
+    "pdv broj",
+    "nadlezni",
+    "adresa",
+    "kontakt",
+    "telefon",
+    "e-mail",
+    "email",
+    "web adresa",
+    "webova stranka",
+    "ico",
+    "dostava",
+    "isporuka",
+    "prodavac",
+    "paketomat",
+    "paket zona",
+    "delivery",
+    "shipping",
+    "returns",
+    "ends in",
+    "popust",
+    "zlava",
+    "cena",
+    "price",
+    "credit",
+    "related",
+)
+
 MD_TABLE_ROW_RE = re.compile(r"^\s*\|(.+)\|\s*$")
 KEY_VALUE_RE = re.compile(
     r"^\s*([A-Za-zČĆŠŽĐčćšžđ][\w \-/()%.]{2,40})\s*[:：]\s*(.{1,200})$"
@@ -170,7 +207,7 @@ COMPARISON_HOSTS = (
 
 
 def _clean_number(raw: str) -> float | None:
-    """'1.899,00' -> 1899.0, '1,899.00' -> 1899.0, '2.340' -> 2340.0."""
+    # "1.899,00" -> 1899.0, "1,899.00" -> 1899.0, "2.340" -> 2340.0
     text = raw.strip().replace(" ", "").replace(" ", "")
     if not text:
         return None
@@ -202,7 +239,6 @@ def _currency_from(token: str | None) -> str:
 
 
 def parse_price(raw: Any, *, currency_hint: str = "") -> PriceInfo:
-    """Parse a shop price into amount + currency, keeping the raw text."""
     if raw is None:
         return PriceInfo()
     text = str(raw).strip()
@@ -221,7 +257,7 @@ def parse_price(raw: Any, *, currency_hint: str = "") -> PriceInfo:
 
 
 def valid_gtin(digits: str) -> bool:
-    """GS1 mod-10 check, so a random 13-digit number is not mistaken for an EAN."""
+    # GS1 mod-10, so a random 13-digit number isn't mistaken for an EAN.
     if not digits.isdigit() or len(digits) not in (8, 12, 13, 14):
         return False
     body, check = digits[:-1], int(digits[-1])
@@ -435,7 +471,7 @@ def _from_meta(metadata: dict[str, str], facts: PageFacts) -> bool:
 
 
 def _markdown_prices(markdown: str) -> list[PriceInfo]:
-    """Prices that sit next to a currency token — plain numbers are too noisy."""
+    # Only prices next to a currency token; plain numbers are too noisy.
     found: list[PriceInfo] = []
     seen: set[float] = set()
     for match in PRICE_NEAR_CURRENCY_RE.finditer(markdown):
@@ -451,6 +487,12 @@ def _markdown_prices(markdown: str) -> list[PriceInfo]:
     return found
 
 
+def _junk_spec(key: str) -> bool:
+    folded = unicodedata.normalize("NFKD", key.replace("đ", "d").lower())
+    folded = "".join(c for c in folded if not unicodedata.combining(c))
+    return any(j in folded for j in JUNK_SPEC_KEYS)
+
+
 def _markdown_specs(markdown: str) -> dict[str, str]:
     specs: dict[str, str] = {}
     for line in markdown.splitlines():
@@ -459,12 +501,19 @@ def _markdown_specs(markdown: str) -> dict[str, str]:
             cells = [c.strip() for c in row.group(1).split("|")]
             cells = [c for c in cells if c and not set(c) <= {"-", ":", " "}]
             if len(cells) == 2 and len(cells[0]) <= 60:
-                specs.setdefault(cells[0].strip("*_ "), cells[1][:200])
+                key = cells[0].strip("*_ ")
+                if not _junk_spec(key):
+                    specs.setdefault(key, cells[1][:200])
         else:
             kv = KEY_VALUE_RE.match(line.strip().lstrip("-*• ").strip("*_ "))
             if kv:
                 key, value = kv.group(1).strip(), kv.group(2).strip()
-                if 2 < len(key) <= 40 and value and not value.startswith("http"):
+                if (
+                    2 < len(key) <= 40
+                    and value
+                    and not value.startswith("http")
+                    and not _junk_spec(key)
+                ):
                     specs.setdefault(key, value[:200])
         if len(specs) >= 40:
             break
@@ -532,7 +581,7 @@ def _from_markdown(markdown: str, facts: PageFacts) -> bool:
 
 
 def _gtin_from_images(image_urls: list[str]) -> str:
-    """Shops name gallery files after the EAN (3337871316617_1.jpg) — free identity."""
+    # Shops often name gallery files after the EAN: 3337871316617_1.jpg
     for url in image_urls:
         for digits in DIGITS13_RE.findall(url):
             if valid_gtin(digits):

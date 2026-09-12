@@ -34,7 +34,7 @@ back / ingredients label", "marketing banner", "shade swatch"), visible_text
 (every readable string, verbatim), and a short note in Serbian.
 
 Then combine everything into one set of facts for the listing: product_name,
-brand, shade, volume, ingredients (the INCI list, if visible), warnings (any
+shade, volume, ingredients (the INCI list, if visible), warnings (any
 safety/allergy claim), and claims (other marketing claims, e.g. "16h",
 "SPF 35"). Use an empty string or empty list for anything not visible. Write
 in Serbian, except for text copied verbatim from the packaging."""
@@ -48,8 +48,8 @@ scope: don't mention them.
 You get two listings of the same (allegedly) product: text scraped from each
 site plus facts a vision model read from each one's photos.
 
-Check exactly these seven dimensions, one result each — no more, no fewer:
-product_identity, brand, shade, volume, ingredients, warnings, images_vs_text.
+Check exactly these six dimensions, one result each — no more, no fewer:
+product_identity, shade, volume, ingredients, warnings, images_vs_text.
 
 For each dimension:
 - value_a / value_b: what each listing states; "—" if not stated at all.
@@ -71,10 +71,10 @@ IMAGE_FILTER_PROMPT = """A shop page was scraped for one product, but its
 photo gallery can include shots of OTHER products — a related-products
 carousel, a banner for a different shade/variant, unrelated promo content.
 
-You're given the product's name and brand, then each candidate photo,
-numbered. Return the numbers of only the photos that actually show THIS
-product (packaging, texture, swatch, or a marketing shot of it — any angle
-is fine). Drop photos that clearly show a different product or variant.
+You're given the product's name, then each candidate photo, numbered.
+Return the numbers of only the photos that actually show THIS product
+(packaging, texture, swatch, or a marketing shot of it — any angle is
+fine). Drop photos that clearly show a different product or variant.
 
 If you can't tell whether a photo shows this product, keep it — only drop
 photos you're confident are unrelated."""
@@ -101,9 +101,6 @@ def _big_enough(data: bytes) -> bool:
 
 
 async def _image_part(url: str) -> dict | None:
-    """One image as a data: URL, or None if it couldn't be used — a dead
-    link, a blocked host, or a tiny icon (the API rejects those outright)
-    just means one fewer photo, not a failed run."""
     data = await fetch_image_bytes(url)
     if data is None or not _big_enough(data):
         return None
@@ -115,23 +112,17 @@ async def _image_part(url: str) -> dict | None:
 
 
 async def _fetch_all(urls: list[str]) -> dict[str, dict]:
-    """Fetch every image once, in parallel; unreachable ones (dead link,
-    blocked host) are silently dropped — one fewer photo, not a failed run."""
+    # Unreachable images are dropped, not fatal: one fewer photo.
     parts = await asyncio.gather(*(_image_part(url) for url in urls))
     return {url: part for url, part in zip(urls, parts) if part is not None}
 
 
 async def _relevant_images(product: Product, parts: dict[str, dict]) -> list[str]:
-    """Ask a cheap/fast model which fetched photos actually show this
-    product, so a page's related-product carousel or other-variant banners
-    don't confuse the (expensive) extraction call below."""
     urls = list(parts)
     if len(urls) < MIN_IMAGES_TO_FILTER:
         return urls
 
-    content: list[dict] = [
-        {"type": "text", "text": f"Product: {product.title} ({product.brand})"}
-    ]
+    content: list[dict] = [{"type": "text", "text": f"Product: {product.title}"}]
     for index, url in enumerate(urls):
         content.append({"type": "text", "text": f"Photo {index}:"})
         content.append(parts[url])
@@ -158,16 +149,37 @@ def _cache() -> dict:
     return {}
 
 
-_EMPTY_FACTS = {
-    "per_image": [],
-    "product_name": "",
-    "brand": "",
-    "shade": "",
-    "volume": "",
-    "ingredients": [],
-    "warnings": [],
-    "claims": [],
-}
+def _cache_store(product_id: str, facts: ImageFacts) -> None:
+    # Re-read right before writing: two products are analysed concurrently,
+    # so a cache read from the start of the run is already stale by now.
+    cache = _cache()
+    cache[product_id] = facts.model_dump()
+    CACHE_FILE.write_text(json.dumps(cache, ensure_ascii=False, indent=2))
+
+
+_EMPTY_FACTS = ImageFacts(
+    per_image=[],
+    product_name="",
+    shade="",
+    volume="",
+    ingredients=[],
+    warnings=[],
+    claims=[],
+)
+
+
+def _restore_urls(facts: ImageFacts, kept: list[str]) -> None:
+    # The model echoes back a shortened filename ("image.webp"), sometimes the
+    # same one twice. Swap in the URL we actually sent, so the cache and the
+    # UI gallery get something fetchable. Findings come back in input order.
+    if len(facts.per_image) == len(kept):
+        for finding, url in zip(facts.per_image, kept):
+            finding.image = url
+        return
+    by_name = {url.rsplit("/", 1)[-1].split("?")[0]: url for url in kept}
+    for finding in facts.per_image:
+        name = finding.image.rsplit("/", 1)[-1].split("?")[0]
+        finding.image = by_name.get(name, finding.image)
 
 
 async def extract_image_facts(product: Product, *, refresh: bool = False) -> ImageFacts:
@@ -181,7 +193,7 @@ async def extract_image_facts(product: Product, *, refresh: bool = False) -> Ima
     parts = await _fetch_all(product.images)
     if not parts:
         # every image was unreadable — nothing to compare against, not a crash
-        return ImageFacts.model_validate(_EMPTY_FACTS)
+        return _EMPTY_FACTS
 
     kept = await _relevant_images(product, parts)
     content: list[dict] = []
@@ -201,8 +213,8 @@ async def extract_image_facts(product: Product, *, refresh: bool = False) -> Ima
     if facts is None:
         raise RuntimeError("Model did not return structured image facts")
 
-    cache[product.id] = facts.model_dump()
-    CACHE_FILE.write_text(json.dumps(cache, ensure_ascii=False, indent=2))
+    _restore_urls(facts, kept)
+    _cache_store(product.id, facts)
     return facts
 
 
@@ -212,7 +224,6 @@ def _offer_payload(product: Product, facts: ImageFacts) -> dict:
         "url": product.url,
         "from_website": {
             "title": product.title,
-            "brand": product.brand,
             "text": product.raw_text,
         },
         "from_images": facts.model_dump(),

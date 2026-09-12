@@ -1,7 +1,5 @@
-"""URL normalization shared by every provider, so the same page found twice
-(via different search engines, with different tracking params) dedupes to one
-candidate. Stdlib only.
-"""
+# URL normalization shared by every provider, so the same page found twice
+# (different engines, different tracking params) dedupes to one candidate.
 
 from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit, urlunsplit
 
@@ -41,7 +39,7 @@ def _strip_port(host: str) -> str:
 
 
 def canonicalize(url: str) -> str:
-    """Stable page identity: lowercase host, no www, no tracking, no fragment."""
+    # Stable page identity: lowercase host, no www, no tracking, no fragment.
     if not url:
         return ""
     raw = url.strip()
@@ -82,7 +80,7 @@ def tld_of(url: str) -> str:
 
 
 def region_of(url: str) -> str:
-    """rs / regional / world purely from the hostname; callers may refine it."""
+    # From the hostname alone; callers may refine it.
     domain = domain_of(url)
     if domain.endswith(".rs") or domain == "rs":
         return "rs"
@@ -103,11 +101,3 @@ def absolutize(base: str, maybe_relative: str) -> str:
         return urljoin(base, candidate)
     except ValueError:
         return ""
-
-
-def path_of(url: str) -> str:
-    return urlsplit(canonicalize(url)).path
-
-
-def query_of(url: str) -> dict[str, str]:
-    return dict(parse_qsl(urlsplit(canonicalize(url)).query, keep_blank_values=False))

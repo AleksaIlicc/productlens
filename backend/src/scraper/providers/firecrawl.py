@@ -1,7 +1,6 @@
-"""Firecrawl v2: broad search (the `site:rs` trick), image search, domain mapping
-and page scraping. Every function returns its payload plus a ProviderCall so the
-caller can show what was spent and what failed.
-"""
+# Firecrawl v2: broad search, image search, domain mapping and page scraping.
+# Every function returns its payload plus a ProviderCall, so the caller can
+# show what was spent and what failed.
 
 import asyncio
 import re
@@ -60,11 +59,8 @@ def credits_of(payload: dict | None) -> float | None:
 
 
 def structured_digest(raw_html: str, *, max_chars: int = 200_000) -> str:
-    """Keep only the parts of the HTML that carry structured data.
-
-    lilly.rs ships 7.5 MB of rawHtml; storing that per page is pointless, but the
-    JSON-LD / <head> / itemprop fragments are exactly what extract.py needs.
-    """
+    # Some shops ship megabytes of rawHtml (lilly.rs: 7.5 MB); only the
+    # JSON-LD / <head> / itemprop fragments matter to extract.py.
     if not raw_html:
         return ""
     parts: list[str] = LD_JSON_BLOCK_RE.findall(raw_html)
@@ -204,7 +200,7 @@ async def search_images(
     limit: int = 10,
     use_cache: bool = True,
 ) -> tuple[list[SearchHit], ProviderCall]:
-    """Image search doubles as page discovery: each image knows the page it sits on."""
+    # Doubles as page discovery: each image knows the page it sits on.
     body = {"query": query, "limit": limit, "sources": ["images"]}
     payload, call = await _call(
         "search", body, kind="fc_images", query=query, use_cache=use_cache
@@ -297,11 +293,8 @@ async def scrape(
     include_structured: bool = True,
     wait_for: int | None = None,
 ) -> tuple[ScrapedPage, ProviderCall, str]:
-    """Scrape one page. Returns (page, call, structured_html_digest).
-
-    The digest is deliberately NOT part of ScrapedPage: it is an extraction input,
-    not something the UI or the LLM handoff should carry around.
-    """
+    # Returns (page, call, structured_html_digest). The digest is deliberately
+    # not part of ScrapedPage: it's an extraction input, not payload.
     settings = get_scraper_settings()
     formats = list(SCRAPE_FORMATS)
     if include_structured:
@@ -425,7 +418,7 @@ async def scrape_many(
     concurrency: int | None = None,
     **kwargs,
 ) -> tuple[list[tuple[ScrapedPage, str]], list[ProviderCall]]:
-    """Scrape in parallel, bounded, input order preserved."""
+    # Bounded parallelism, input order preserved.
     settings = get_scraper_settings()
     semaphore = asyncio.Semaphore(max(1, concurrency or settings.scrape_concurrency))
 

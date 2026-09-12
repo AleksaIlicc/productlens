@@ -3,7 +3,6 @@ export type Product = {
   source: string;
   url: string;
   title: string;
-  brand: string;
   raw_text: string;
   images: string[];
 };
@@ -18,7 +17,6 @@ export type ImageFinding = {
 export type ImageFacts = {
   per_image: ImageFinding[];
   product_name: string;
-  brand: string;
   shade: string;
   volume: string;
   ingredients: string[];
@@ -33,7 +31,6 @@ export type Severity = 'info' | 'low' | 'medium' | 'high';
 // schemas.py) — price/availability/SKU/category are intentionally out of scope.
 export type ComparisonField =
   | 'product_identity'
-  | 'brand'
   | 'shade'
   | 'volume'
   | 'ingredients'

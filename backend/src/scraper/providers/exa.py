@@ -1,6 +1,5 @@
-"""Exa: precision search (a domain whitelist returns almost only real product
-pages) plus /contents as a cheap fallback reader for pages Firecrawl cannot get.
-"""
+# Exa: precision search (a domain whitelist returns almost only real product
+# pages) plus /contents as a cheap fallback reader for pages Firecrawl can't get.
 
 from scraper import cache
 from scraper.http import post_json
@@ -149,9 +148,8 @@ async def contents(
     livecrawl: str = "preferred",
     use_cache: bool = True,
 ) -> tuple[list[ScrapedPage], ProviderCall]:
-    """Fallback reader. Exa returns plain text (not markdown) — good enough for
-    prices/descriptions when Firecrawl is blocked, and it costs ~$0.001.
-    """
+    # Fallback reader: plain text, not markdown — good enough for
+    # prices/descriptions when Firecrawl is blocked, and it costs ~$0.001.
     if not urls:
         return [], ProviderCall(provider="exa", endpoint="contents", ok=True, results=0)
 

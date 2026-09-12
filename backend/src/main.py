@@ -20,9 +20,7 @@ def health():
 
 
 def _analyzed(product: Product, facts: ImageFacts) -> Product:
-    """The product as returned to the client: images narrowed to whichever
-    ones actually got analyzed (irrelevant/unreachable ones dropped), so the
-    gallery the UI shows matches what the model actually looked at."""
+    # Narrow images to what was actually analyzed, so the UI gallery matches.
     kept = [finding.image for finding in facts.per_image]
     return product.model_copy(update={"images": kept}) if kept else product
 

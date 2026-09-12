@@ -1,8 +1,7 @@
-"""Turn the pile of image URLs a shop page yields into a clean product gallery.
-
-Rules come from real pages (lilly.rs Magento cache hashes, apotekajankovic
-OpenCart `-640x640` variants, Exa imageLinks mixing in site chrome).
-"""
+# Turn the pile of image URLs a shop page yields into a clean product gallery.
+# Rules come from real pages (Magento cache hashes, OpenCart -640x640
+# variants, Exa imageLinks mixing in site chrome). Heuristics only: photos of
+# a genuinely different product are caught later, by the LLM filter.
 
 import re
 from collections.abc import Iterable
@@ -67,6 +66,7 @@ JUNK_PATTERNS = (
     "newsletter",
     "trustpilot",
     "cookie",
+    "icons8",
     "/icons/",
     "/icon/",
     "icon-",
@@ -142,7 +142,7 @@ def _is_junk(url: str) -> bool:
 
 
 def parsed_size(img: ImageRef) -> tuple[int, int]:
-    """Declared size, else the largest WxH marker found in the URL."""
+    # Declared size, else the largest WxH marker found in the URL.
     if img.width and img.height:
         return img.width, img.height
     path = urlsplit(img.url).path
@@ -167,7 +167,7 @@ def _too_small(img: ImageRef) -> bool:
 
 
 def identity_key(url: str) -> str:
-    """Same asset in different sizes / cache buckets collapses to one key."""
+    # Same asset in different sizes / cache buckets collapses to one key.
     parts = urlsplit(url.lower())
     segments = [s for s in parts.path.split("/") if s]
     kept: list[str] = []
@@ -204,12 +204,9 @@ def clean_gallery(
     prefer_token: str = "",
     prefer_tokens: tuple[str, ...] = (),
 ) -> list[ImageRef]:
-    """Absolutize -> drop chrome -> collapse size variants -> order -> cap.
-
-    `prefer_token` is the page's GTIN/SKU. Shops name product files after it
-    (lilly.rs, shoppster.rs), so it lets us push the real gallery first and drop
-    photos carrying a different EAN, i.e. related-product carousels.
-    """
+    # Absolutize -> drop chrome -> collapse size variants -> order -> cap.
+    # `prefer_token` is the page's GTIN/SKU: shops that name product files
+    # after it let us drop photos carrying a different EAN.
     best: dict[str, tuple[int, int, ImageRef]] = {}
     for order, img in enumerate(images):
         url = absolutize(page_url, img.url)

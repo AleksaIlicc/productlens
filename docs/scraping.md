@@ -125,7 +125,6 @@ svega što `extract.py` nađe (cena/dostupnost/SKU/GTIN ostaju samo na
       "url": "https://www.apotekajankovic.rs/vichy-dermablend-corrector-...",
       "domain": "apotekajankovic.rs",
       "title": "VICHY DERMABLEND CORRECTOR Tečni korektivni puder SPF 35, 30 ml, 35 Sand",
-      "brand": "VICHY",
       "images": ["https://www.apotekajankovic.rs/image/cache/.../3337871316617_1-640x640.webp"],
       "specs": {},
       "description": "…",
@@ -150,7 +149,7 @@ razumnim podrazumevanim opcijama i ne prikazuje te detalje.
 **Drugi filter slika, na LLM strani** (`backend/src/llm.py`): pošto se slike
 preuzmu, ako ih ima 3+ jedan jeftin/brz model (`xai_filter_model`, podrazumevano
 `grok-4.20-0309-non-reasoning`, ~2s po pozivu naspram ~150-200s za reasoning
-model) dobije naziv/brend proizvoda plus sve fotografije i vrati koje od njih
+model) dobije naziv proizvoda plus sve fotografije i vrati koje od njih
 stvarno prikazuju baš taj proizvod. Ovo hvata upravo ono što heuristika u
 `images.py` ne može — prave fotografije DRUGOG proizvoda koje su se našle na
 istoj strani (npr. generalni retailer sa "srodni proizvodi" galerijom).

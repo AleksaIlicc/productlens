@@ -15,7 +15,7 @@ ugrađenog scraper-a (pretraga interneta + skrejpovanje, vidi
 
 1. **Pretraga** — na glavnoj strani se unese ime proizvoda; backend
    (`/api/scraper/discover`) nađe najbolje strane (domaće i svetske),
-   skrejpuje ih i vrati listu ponuda (naslov, brend, sirov tekst stranice,
+   skrejpuje ih i vrati listu ponuda (naslov, sirov tekst stranice,
    URL-ovi fotografija).
 2. **Izbor** — korisnik iz padajućih listi bira bilo koje dve ponude za
    poređenje.
@@ -28,8 +28,8 @@ ugrađenog scraper-a (pretraga interneta + skrejpovanje, vidi
    kešira u `backend/data/image_facts.cache.json`; odgovor takođe vraća
    proizvod sa slikama suženim na ono što je stvarno analizirano.
 4. **Poređenje** — oba skupa podataka (sajt + slike) idu u jedan poziv koji
-   proverava tačno 7 unapred definisanih dimenzija (`product_identity`,
-   `brand`, `shade`, `volume`, `ingredients`, `warnings`, `images_vs_text` —
+   proverava tačno 6 unapred definisanih dimenzija (`product_identity`,
+   `shade`, `volume`, `ingredients`, `warnings`, `images_vs_text` —
    vidi `ComparisonField` u `backend/src/schemas.py`) sa statusom (`match` /
    `minor` / `mismatch` / `missing`), ozbiljnošću i objašnjenjem na srpskom.
    Taj fiksni skup polja je namerno zatvoren (ne slobodan tekst) da model ne
@@ -57,7 +57,7 @@ npm run dev
 | `POST /api/compare` | `{"a": Product, "b": Product}` → podaci sa slika + izveštaj o razlikama |
 | `POST /api/scraper/discover` | pretraga + skrejpovanje po imenu proizvoda (vidi [docs/scraping.md](docs/scraping.md)) |
 
-`Product` = `{id, source, url, title, brand, raw_text, images}`; `frontend/src/search.ts`
+`Product` = `{id, source, url, title, raw_text, images}`; `frontend/src/search.ts`
 gradi ovaj oblik od jedne ponude koju vrati `/api/scraper/discover`.
 
 Poređenje traje ~2-4 minuta (grok-4.6 je reasoning model, plus preuzimanje

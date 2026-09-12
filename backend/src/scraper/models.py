@@ -115,20 +115,13 @@ class ProviderCall(BaseModel):
     error: str = ""
 
 
+# What becomes a `Product` — deliberately narrower than PageFacts above.
+# Price/availability/SKU/GTIN stay on PageFacts for the debug view; they're
+# store metadata, out of scope for brand consistency.
 class ScrapedOffer(BaseModel):
-    """One shop's offer: the handoff unit for the LLM comparison step.
-
-    Deliberately narrow — this is what becomes a `Product` (see
-    frontend/src/search.ts), not a dump of everything `extract.py` found.
-    Price/availability/SKU/GTIN are still on `PageFacts` above for the
-    debug view; they're commercial/store metadata, out of scope for brand
-    consistency (see `ComparisonField` in backend/src/schemas.py).
-    """
-
     url: str
     domain: str
     title: str = ""
-    brand: str = ""
     images: list[str] = Field(default_factory=list)
     specs: dict[str, str] = Field(default_factory=dict)
     description: str = ""

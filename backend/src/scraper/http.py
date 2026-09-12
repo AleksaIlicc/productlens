@@ -1,6 +1,5 @@
-"""Thin async HTTP helper. Uses httpx2 (already in the venv via openai) and never
-raises for network/HTTP problems: callers get a result object and keep going.
-"""
+# Thin async HTTP helper; never raises for network/HTTP problems — callers
+# get a result object and keep going.
 
 import asyncio
 import ipaddress
@@ -110,10 +109,8 @@ async def get_bytes(
     validate: Callable[[str], Awaitable[str]] | None = None,
     max_redirects: int = 3,
 ) -> tuple[int | None, bytes, str, str]:
-    """Fetch bytes with a hard size cap, following redirects manually so that
-    `validate` (the SSRF guard) runs again for every hop. Returns
-    (status, body, content_type, error).
-    """
+    # Redirects are followed manually so `validate` (the SSRF guard) runs
+    # again for every hop. Returns (status, body, content_type, error).
     current = url
     for _ in range(max_redirects + 1):
         if validate is not None:
@@ -147,11 +144,8 @@ async def get_bytes(
 
 
 async def public_url_problem(url: str) -> str:
-    """SSRF guard: public http(s) hosts on standard ports only, per redirect hop.
-
-    Shared by the image proxy route and the comparison step's own image fetch —
-    every caller that follows a shop-supplied URL needs this same check.
-    """
+    # SSRF guard: public http(s) hosts on standard ports only. Shared by the
+    # image proxy route and the comparison step's own image fetch.
     parts = urlsplit(url)
     if parts.scheme not in ("http", "https"):
         return "dozvoljeni su samo http i https"
@@ -193,12 +187,8 @@ async def public_url_problem(url: str) -> str:
 async def fetch_image_bytes(
     url: str, *, timeout: float = 20.0, max_bytes: int = 8 * 1024 * 1024
 ) -> bytes | None:
-    """Fetch one image for the vision step, or None if it's unsafe/unreachable.
-
-    Unlike the `/image` proxy route, callers here don't need to know *why* an
-    image was skipped — a dead link or a blocked host is just one fewer photo
-    for the model to look at, not a request that should fail.
-    """
+    # Unlike the /image proxy route, callers here don't need to know *why* an
+    # image was skipped — it's just one fewer photo, not a failed request.
     if await public_url_problem(url):
         return None
     status, body, content_type, error = await get_bytes(

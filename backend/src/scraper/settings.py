@@ -10,8 +10,6 @@ RUNS_DIR = DATA_DIR / "scraper_runs"
 
 
 class ScraperSettings(BaseSettings):
-    """Config for the scraper; shares the app .env, ignores unrelated keys."""
-
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     firecrawl_api_key: str = ""

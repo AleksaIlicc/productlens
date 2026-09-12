@@ -56,23 +56,17 @@ export function RegionBadge({ region }: { region: Region }) {
   );
 }
 
+const STATUS_BADGE: Record<
+  PageStatus,
+  { tone: 'green' | 'amber' | 'rose'; label: string }
+> = {
+  ok: { tone: 'green', label: 'skrejpovano' },
+  blocked: { tone: 'amber', label: 'blokirano' },
+  error: { tone: 'rose', label: 'greška' },
+};
+
 export function StatusBadge({ status }: { status: PageStatus }) {
-  const tone =
-    status === 'ok'
-      ? 'green'
-      : status === 'blocked'
-        ? 'amber'
-        : status === 'error'
-          ? 'rose'
-          : 'slate';
-  const label =
-    status === 'ok'
-      ? 'skrejpovano'
-      : status === 'blocked'
-        ? 'blokirano'
-        : status === 'error'
-          ? 'greška'
-          : 'preskočeno';
+  const { tone, label } = STATUS_BADGE[status];
   return <Badge tone={tone}>{label}</Badge>;
 }
 

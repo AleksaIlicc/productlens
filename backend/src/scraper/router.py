@@ -1,9 +1,6 @@
-"""Search + scraping side of ProductLens: no LLM calls in this file.
-
-`/api/scraper/discover` is also what the main page's product search calls; the
-routes here additionally expose the full run (candidates, scores, provider
-calls) for debugging, which the main page does not need.
-"""
+# Search + scraping side: no LLM calls here. `/discover` is what the main
+# page's product search calls; these routes additionally expose the full run
+# (candidates, scores, provider calls) for debugging.
 
 import asyncio
 from urllib.parse import unquote, urlsplit
@@ -86,7 +83,7 @@ def run(run_id: str) -> DiscoverResponse:
 
 @router.get("/image")
 async def image(url: str = Query(..., min_length=8, max_length=2048)) -> Response:
-    """Proxy product images so hotlink protection cannot blank out the gallery."""
+    # Proxied so shop hotlink protection can't blank out the gallery.
     target = unquote(url).strip()
     problem = await public_url_problem(target)
     if problem:

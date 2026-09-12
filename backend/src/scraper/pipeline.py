@@ -1,7 +1,6 @@
-"""The scraper run: build query variants -> search both worlds in parallel -> merge and
-rank -> scrape the best pages -> extract facts and images -> hand back a payload
-the LLM step can consume. No LLM calls here.
-"""
+# One run: build query variants -> search in parallel -> merge and rank ->
+# scrape the best pages -> extract facts and images -> hand back a payload
+# the LLM step can consume. No LLM calls here.
 
 import asyncio
 import uuid
@@ -45,11 +44,8 @@ def _run_id() -> str:
 
 
 def build_queries(query: str, *, scope: str = "both") -> dict[str, list[str]]:
-    """Query recipes per provider and per world.
-
-    Firecrawl needs `site:rs` to surface Serbian shops at all; Exa does the same job
-    through a domain whitelist. The plain query is what finds the international shops.
-    """
+    # Firecrawl needs `site:rs` to surface Serbian shops at all; Exa does the
+    # same through a domain whitelist. The plain query finds the rest.
     base = query.strip()
     local = [f"{base} site:rs", f"{base} cena kupovina"]
     world = [base, f"{base} buy online price"]
@@ -159,7 +155,7 @@ async def _run_searches(
 async def _deep_map(
     req: DiscoverRequest, seen_domains: set[str]
 ) -> tuple[list[SearchHit], list[ProviderCall]]:
-    """Map shop domains we have not seen yet: high recall, ~10s per domain."""
+    # Map shop domains we haven't seen yet: high recall, ~10s per domain.
     pool: list[str] = []
     if req.scope in ("both", "rs"):
         pool.extend(merge.SR_SHOP_DOMAINS[:8])
@@ -293,7 +289,6 @@ def _build_payload(
             url=page.final_url or page.url,
             domain=page.domain,
             title=page.facts.title,
-            brand=page.facts.brand,
             images=gallery_urls(page.images, get_scraper_settings().max_images),
             specs=page.facts.specs,
             description=page.facts.description,

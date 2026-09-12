@@ -13,7 +13,7 @@ export type PageType =
   | 'article'
   | 'video'
   | 'unknown';
-export type PageStatus = 'ok' | 'blocked' | 'error' | 'skipped';
+export type PageStatus = 'ok' | 'blocked' | 'error';
 
 export type ImageRef = {
   url: string;
@@ -106,7 +106,6 @@ export type ScrapedOffer = {
   url: string;
   domain: string;
   title: string;
-  brand: string;
   images: string[];
   specs: Record<string, string>;
   description: string;
@@ -196,7 +195,7 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
   return res.json();
 }
 
-/** Product images go through the backend so hotlink protection cannot blank them. */
+// Product images go through the backend so hotlink protection can't blank them.
 export const proxiedImage = (url: string) =>
   `/api/scraper/image?url=${encodeURIComponent(url)}`;
 

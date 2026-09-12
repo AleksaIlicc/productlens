@@ -42,13 +42,11 @@ export function offerToProduct(offer: ScrapedOffer): Product {
     source: offer.domain,
     url: offer.url,
     title: offer.title || offer.domain,
-    brand: offer.brand,
     raw_text: offerText(offer),
     images: offer.images,
   };
 }
 
-/** Search the web for a product name and return it pre-converted to Products. */
 export async function searchProducts(query: string) {
   const run = await discover({ ...SEARCH_DEFAULTS, query });
   return { run, products: run.payload.offers.map(offerToProduct) };

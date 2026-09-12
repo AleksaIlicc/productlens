@@ -1,7 +1,5 @@
-"""Manual connectivity check for the xAI API. Run directly, not via pytest:
-
-uv run python tests/test_xai_connection.py
-"""
+# Manual xAI connectivity check. Run directly, not via pytest:
+#   uv run python tests/test_xai_connection.py
 
 import os
 
