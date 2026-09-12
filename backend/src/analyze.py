@@ -37,9 +37,9 @@ SEARCH_DEFAULTS: dict = {
 # Raw page text is only a fallback when a page had no structured description.
 MAX_FALLBACK_CHARS = 4000
 
-# Every listing adds a vision call and grows the audit payload; past this the
-# audit gets slow and vague rather than more useful.
-MAX_LISTINGS = 8
+# The search never returns more than `scrape_top` listings, so this cap only
+# has to match it — there is never a result the picker cannot select.
+MAX_LISTINGS = SEARCH_DEFAULTS["scrape_top"]
 
 # How many listings to tick for the user before they adjust the selection.
 DEFAULT_SELECTION = 3

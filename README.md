@@ -22,9 +22,10 @@ Korisnik unese jedno ime proizvoda i gleda kako run teče.
    svetske), skrejpuje ih (do 10) i izvuče tekst, specifikaciju i galeriju.
    Bira se prvo po jedna strana po prodavnici, pa tek onda druga iz iste —
    poređenje je između kanala, pa je nova prodavnica uvek vrednija.
-2. **Izbor kanala** — korisnik čekira koje ponude hoće da uporedi (2 do 8);
-   par se ne nameće. Unapred su čekirane najbolje ponude iz različitih
-   prodavnica i, ako postoji, iz različitih regiona.
+2. **Izbor kanala** — korisnik čekira koje ponude hoće da uporedi (2 do 10,
+   tj. sve što je pretraga vratila); par se ne nameće. Unapred su čekirane
+   najbolje ponude iz različitih prodavnica i, ako postoji, iz različitih
+   regiona — jedan klik na „Select all“ uzima sve.
 3. **Podaci sa slika** — fotografije se preuzimaju sa udaljenih URL-ova; ako
    ih ima 3 ili više, jeftiniji/brži model (`xai_filter_model`) prvo odbaci
    one koje ne prikazuju baš taj proizvod (stranica zna da povuče i slike
@@ -71,7 +72,7 @@ npm run dev
 | Ruta | Opis |
 | --- | --- |
 | `POST /api/analyze` | `{"query": "..."}` → `{job_id}`; pretraga + skrejpovanje |
-| `POST /api/analyze/compare` | `{"listings": [Product, ...]}` (2-8) → `{job_id}`; audit izabranih kanala |
+| `POST /api/analyze/compare` | `{"listings": [Product, ...]}` (2-10) → `{job_id}`; audit izabranih kanala |
 | `GET /api/analyze/{job_id}?cursor=N` | događaji od `cursor` nadalje + rezultat kad je gotovo |
 | `POST /api/compare` | isti posao kao gore, ali kao jedan blokirajući zahtev (bez progresa) |
 | `POST /api/scraper/discover` | pretraga + skrejpovanje po imenu proizvoda (vidi [docs/scraping.md](docs/scraping.md)) |

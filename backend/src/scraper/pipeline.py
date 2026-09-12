@@ -447,9 +447,8 @@ def _warnings(
     no_images = [p.domain for p in pages if p.status == "ok" and not p.images]
     if no_images:
         warnings.append("No images from: " + ", ".join(sorted(set(no_images))))
-    truncated = [p.domain for p in pages if p.truncated]
-    if truncated:
-        warnings.append("Page text was truncated for: " + ", ".join(sorted(set(truncated))))
+    # Truncation is normal on a long shop page and fires on almost every run;
+    # the scraper console badges it per page, which is where it belongs.
     return warnings
 
 

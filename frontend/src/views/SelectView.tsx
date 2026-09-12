@@ -5,8 +5,9 @@ import { useState } from 'react';
 import type { Product, RunStats } from '../api';
 import { card, clock, Eyebrow, ghostButton, primaryButton, Thumb } from '../ui';
 
-// Mirrors MAX_LISTINGS / the minimum in backend/src/analyze.py.
-const MAX_PICKS = 8;
+// Mirrors MAX_LISTINGS / the minimum in backend/src/analyze.py. The search
+// caps at 10 listings, so every result can be selected.
+const MAX_PICKS = 10;
 const MIN_PICKS = 2;
 
 function isLocal(url: string): boolean {
@@ -102,6 +103,8 @@ export default function SelectView({
 
   const selection = products.filter((product) => picked.includes(product.id));
   const full = picked.length >= MAX_PICKS;
+  const all = products.slice(0, MAX_PICKS).map((product) => product.id);
+  const allPicked = picked.length >= Math.min(products.length, MAX_PICKS);
 
   if (products.length < MIN_PICKS) {
     return (
@@ -154,7 +157,20 @@ export default function SelectView({
         </p>
       )}
 
-      <div className="mt-7 grid gap-3 sm:grid-cols-2">
+      <div className="mt-7 flex items-center justify-between gap-3">
+        <p className="eyebrow text-ink-50">Listings</p>
+        <button
+          type="button"
+          onClick={() => setPicked(allPicked ? [] : all)}
+          className="text-[12px] font-semibold text-wine underline-offset-4 hover:underline"
+        >
+          {allPicked
+            ? 'Clear all'
+            : `Select all ${Math.min(products.length, MAX_PICKS)}`}
+        </button>
+      </div>
+
+      <div className="mt-2.5 grid gap-3 sm:grid-cols-2">
         {products.map((product) => (
           <ListingCard
             key={product.id}
