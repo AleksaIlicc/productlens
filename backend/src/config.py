@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     xai_api_key: str = ""
     xai_base_url: str = "https://api.x.ai/v1"
     xai_model: str = "grok-4.6"
+    xai_filter_model: str = "grok-4.20-0309-non-reasoning"
 
 
 @lru_cache

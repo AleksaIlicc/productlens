@@ -98,16 +98,15 @@ export type ProviderCall = {
   error: string;
 };
 
+// Deliberately narrow — this is what becomes a Product (see
+// frontend/src/search.ts). Price/availability/SKU/GTIN are still on
+// ScrapedPage.facts for the debug view below; they're commercial/store
+// metadata, out of scope for brand consistency.
 export type ScrapedOffer = {
   url: string;
   domain: string;
-  region: Region;
   title: string;
   brand: string;
-  price: PriceInfo;
-  availability: string;
-  sku: string;
-  gtin: string;
   images: string[];
   specs: Record<string, string>;
   description: string;

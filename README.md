@@ -19,10 +19,14 @@ ugrađenog scraper-a (pretraga interneta + skrejpovanje, vidi
    URL-ovi fotografija).
 2. **Izbor** — korisnik iz padajućih listi bira bilo koje dve ponude za
    poređenje.
-3. **Podaci sa slika** — jedan vision poziv po ponudi pročita sve fotografije
-   (preuzete sa udaljenih URL-ova) i vrati strukturirane podatke (tekst sa
+3. **Podaci sa slika** — fotografije se preuzimaju sa udaljenih URL-ova; ako
+   ih ima 3 ili više, jeftiniji/brži model (`xai_filter_model`) prvo odbaci
+   one koje ne prikazuju baš taj proizvod (stranica zna da povuče i slike
+   povezanih proizvoda ili druge nijanse). Tek onda glavni (reasoning) model
+   pročita preostale fotografije i vrati strukturirane podatke (tekst sa
    ambalaže, nijansa, zapremina, sastojci, upozorenja, tvrdnje). Rezultat se
-   kešira u `backend/data/image_facts.cache.json`.
+   kešira u `backend/data/image_facts.cache.json`; odgovor takođe vraća
+   proizvod sa slikama suženim na ono što je stvarno analizirano.
 4. **Poređenje** — oba skupa podataka (sajt + slike) idu u jedan poziv koji
    proverava tačno 7 unapred definisanih dimenzija (`product_identity`,
    `brand`, `shade`, `volume`, `ingredients`, `warnings`, `images_vs_text` —

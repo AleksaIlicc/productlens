@@ -127,8 +127,16 @@ def _is_junk(url: str) -> bool:
     low = url.lower()
     if low.startswith("data:") or not low.startswith(("http://", "https://")):
         return True
-    path = urlsplit(low).path
-    if path.endswith(BAD_EXTENSIONS):
+    parts = urlsplit(low)
+    if parts.path.endswith(BAD_EXTENSIONS):
+        return True
+    # Some CDNs proxy images via ?url=<encoded original> (Next.js image
+    # optimizer and similar) — the real filename/extension lives there, not
+    # in the proxy's own path.
+    inner = dict(parse_qsl(parts.query)).get("url", "")
+    if inner.startswith(("http://", "https://")) and urlsplit(inner).path.endswith(
+        BAD_EXTENSIONS
+    ):
         return True
     return any(p in low for p in JUNK_PATTERNS)
 

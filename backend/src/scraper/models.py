@@ -116,17 +116,19 @@ class ProviderCall(BaseModel):
 
 
 class ScrapedOffer(BaseModel):
-    """One shop's offer: the handoff unit for the LLM comparison step."""
+    """One shop's offer: the handoff unit for the LLM comparison step.
+
+    Deliberately narrow — this is what becomes a `Product` (see
+    frontend/src/search.ts), not a dump of everything `extract.py` found.
+    Price/availability/SKU/GTIN are still on `PageFacts` above for the
+    debug view; they're commercial/store metadata, out of scope for brand
+    consistency (see `ComparisonField` in backend/src/schemas.py).
+    """
 
     url: str
     domain: str
-    region: Region = "world"
     title: str = ""
     brand: str = ""
-    price: PriceInfo = Field(default_factory=PriceInfo)
-    availability: str = ""
-    sku: str = ""
-    gtin: str = ""
     images: list[str] = Field(default_factory=list)
     specs: dict[str, str] = Field(default_factory=dict)
     description: str = ""

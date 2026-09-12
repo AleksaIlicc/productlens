@@ -1,15 +1,26 @@
+import asyncio
 import base64
+import io
 import json
 from functools import lru_cache
 from pathlib import Path
 
 from openai import AsyncOpenAI
-from pydantic import ValidationError
+from PIL import Image, UnidentifiedImageError
+from pydantic import BaseModel, ValidationError
 
 from config import get_settings
 from products import Product
 from schemas import Comparison, ImageFacts
 from scraper.http import fetch_image_bytes
+
+# Below this many photos there's nothing meaningful to filter — a page with
+# 1-2 images doesn't carry an unrelated-product carousel.
+MIN_IMAGES_TO_FILTER = 3
+
+# xAI's vision API hard-rejects anything smaller than this (whole batch
+# fails, not just that image) — site icons and tiny thumbnails hit this.
+MIN_IMAGE_PIXELS = 512
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 CACHE_FILE = BACKEND_DIR / "data" / "image_facts.cache.json"
@@ -56,6 +67,22 @@ guessing — don't invent findings.
 same_product: whether this is physically the same item. verdict: a 2-3
 sentence summary, in Serbian."""
 
+IMAGE_FILTER_PROMPT = """A shop page was scraped for one product, but its
+photo gallery can include shots of OTHER products — a related-products
+carousel, a banner for a different shade/variant, unrelated promo content.
+
+You're given the product's name and brand, then each candidate photo,
+numbered. Return the numbers of only the photos that actually show THIS
+product (packaging, texture, swatch, or a marketing shot of it — any angle
+is fine). Drop photos that clearly show a different product or variant.
+
+If you can't tell whether a photo shows this product, keep it — only drop
+photos you're confident are unrelated."""
+
+
+class _RelevantImages(BaseModel):
+    keep: list[int]
+
 
 @lru_cache
 def _client() -> AsyncOpenAI:
@@ -65,11 +92,20 @@ def _client() -> AsyncOpenAI:
     return AsyncOpenAI(api_key=settings.xai_api_key, base_url=settings.xai_base_url)
 
 
+def _big_enough(data: bytes) -> bool:
+    try:
+        with Image.open(io.BytesIO(data)) as img:
+            return (img.width * img.height) >= MIN_IMAGE_PIXELS
+    except UnidentifiedImageError:
+        return False
+
+
 async def _image_part(url: str) -> dict | None:
-    """One image as a data: URL, or None if it couldn't be fetched — a dead
-    link or a blocked host just means one fewer photo, not a failed run."""
+    """One image as a data: URL, or None if it couldn't be used — a dead
+    link, a blocked host, or a tiny icon (the API rejects those outright)
+    just means one fewer photo, not a failed run."""
     data = await fetch_image_bytes(url)
-    if data is None:
+    if data is None or not _big_enough(data):
         return None
     b64 = base64.b64encode(data).decode()
     return {
@@ -78,15 +114,42 @@ async def _image_part(url: str) -> dict | None:
     }
 
 
-async def _image_content(product: Product) -> list[dict]:
-    content: list[dict] = []
-    for url in product.images:
-        part = await _image_part(url)
-        if part is None:
-            continue
-        content.append({"type": "text", "text": f"Image: {url}"})
-        content.append(part)
-    return content
+async def _fetch_all(urls: list[str]) -> dict[str, dict]:
+    """Fetch every image once, in parallel; unreachable ones (dead link,
+    blocked host) are silently dropped — one fewer photo, not a failed run."""
+    parts = await asyncio.gather(*(_image_part(url) for url in urls))
+    return {url: part for url, part in zip(urls, parts) if part is not None}
+
+
+async def _relevant_images(product: Product, parts: dict[str, dict]) -> list[str]:
+    """Ask a cheap/fast model which fetched photos actually show this
+    product, so a page's related-product carousel or other-variant banners
+    don't confuse the (expensive) extraction call below."""
+    urls = list(parts)
+    if len(urls) < MIN_IMAGES_TO_FILTER:
+        return urls
+
+    content: list[dict] = [
+        {"type": "text", "text": f"Product: {product.title} ({product.brand})"}
+    ]
+    for index, url in enumerate(urls):
+        content.append({"type": "text", "text": f"Photo {index}:"})
+        content.append(parts[url])
+
+    completion = await _client().chat.completions.parse(
+        model=get_settings().xai_filter_model,
+        messages=[
+            {"role": "system", "content": IMAGE_FILTER_PROMPT},
+            {"role": "user", "content": content},
+        ],
+        response_format=_RelevantImages,
+    )
+    result = completion.choices[0].message.parsed
+    if not result or not result.keep:
+        return urls  # filter call failed to commit to anything — fail open
+
+    kept = [urls[i] for i in result.keep if 0 <= i < len(urls)]
+    return kept or urls
 
 
 def _cache() -> dict:
@@ -115,10 +178,16 @@ async def extract_image_facts(product: Product, *, refresh: bool = False) -> Ima
         except ValidationError:
             pass  # schema changed since this was cached — re-extract below
 
-    content = await _image_content(product)
-    if not content:
+    parts = await _fetch_all(product.images)
+    if not parts:
         # every image was unreadable — nothing to compare against, not a crash
         return ImageFacts.model_validate(_EMPTY_FACTS)
+
+    kept = await _relevant_images(product, parts)
+    content: list[dict] = []
+    for url in kept:
+        content.append({"type": "text", "text": f"Image: {url}"})
+        content.append(parts[url])
 
     completion = await _client().chat.completions.parse(
         model=get_settings().xai_model,

@@ -99,14 +99,22 @@ curl -s -X POST http://127.0.0.1:8000/api/scraper/discover \
    imena fajlova slika (lilly i jankovic slike se zovu po EAN-u `3337871316617`).
 7. **Slike** (`images.py`) — spajaju se Firecrawl `images`, `og:image` i Exa
    `imageLinks`, pa se čiste: izbacuju se logoi, banneri, stikeri, ikonice i
-   editorial grafike; iste slike u više veličina i pod različitim cache hash-evima
-   se spajaju u jednu (najveća varijanta pobeđuje), a kada shop imenuje fajlove po
-   proizvodu (GTIN/SKU), zadržavaju se samo te slike — tako u galeriju ne ulaze
-   „povezani proizvodi“. Glavna/`og` slika je prva.
+   editorial grafike (i kad im se pravo ime/ekstenzija krije u `?url=`
+   query parametru nekog CDN proxy-ja, npr. Next.js image optimizera); iste
+   slike u više veličina i pod različitim cache hash-evima se spajaju u
+   jednu (najveća varijanta pobeđuje), a kada shop imenuje fajlove po
+   proizvodu (GTIN/SKU), zadržavaju se samo te slike — tako u galeriju ne
+   ulaze „povezani proizvodi“. Glavna/`og` slika je prva. Ovo je čisto
+   heuristika (ime fajla/putanje); fotografije koje su suštinski PRAVE
+   fotografije nekog DRUGOG proizvoda (npr. generalni retailer koji na
+   istoj strani ubaci i slike iz drugih linija) prolaze ovaj filter i
+   hvata ih tek LLM korak niže (vidi ispod).
 
 ## `payload` — spoj sa LLM delom
 
-To je jedina stvar koju LLM korak treba od nas:
+To je jedina stvar koju LLM korak treba od nas — namerno uzak oblik, ne dump
+svega što `extract.py` nađe (cena/dostupnost/SKU/GTIN ostaju samo na
+`pages[].facts` za napredni prikaz, van su domašaja poređenja):
 
 ```json
 {
@@ -116,13 +124,8 @@ To je jedina stvar koju LLM korak treba od nas:
     {
       "url": "https://www.apotekajankovic.rs/vichy-dermablend-corrector-...",
       "domain": "apotekajankovic.rs",
-      "region": "rs",
       "title": "VICHY DERMABLEND CORRECTOR Tečni korektivni puder SPF 35, 30 ml, 35 Sand",
       "brand": "VICHY",
-      "price": { "raw": "2904.81", "amount": 2904.81, "currency": "RSD" },
-      "availability": "Na stanju",
-      "sku": "4004",
-      "gtin": "3337871316617",
       "images": ["https://www.apotekajankovic.rs/image/cache/.../3337871316617_1-640x640.webp"],
       "specs": {},
       "description": "…",
@@ -143,6 +146,19 @@ za vision poziv preuzimaju preko istog SSRF-bezbednog fetch-a koji koristi i
 Ovaj router ostaje — sad služi kao napredni prikaz jednog runa (kandidati,
 skorovi, pozivi provajdera), dok glavna strana zove isti `/discover` sa
 razumnim podrazumevanim opcijama i ne prikazuje te detalje.
+
+**Drugi filter slika, na LLM strani** (`backend/src/llm.py`): pošto se slike
+preuzmu, ako ih ima 3+ jedan jeftin/brz model (`xai_filter_model`, podrazumevano
+`grok-4.20-0309-non-reasoning`, ~2s po pozivu naspram ~150-200s za reasoning
+model) dobije naziv/brend proizvoda plus sve fotografije i vrati koje od njih
+stvarno prikazuju baš taj proizvod. Ovo hvata upravo ono što heuristika u
+`images.py` ne može — prave fotografije DRUGOG proizvoda koje su se našle na
+istoj strani (npr. generalni retailer sa "srodni proizvodi" galerijom).
+Uz to, slike manje od 512 piksela (ikonice koje heuristika promaši) se
+odbacuju pre slanja — xAI vision API inače odbije ceo poziv zbog jedne
+premalene slike. Odgovor `/api/compare` vraća `a`/`b` sa `images` suženim na
+ono što je stvarno analizirano (`main._analyzed`), tako da UI posle poređenja
+prikazuje istu galeriju koju je i model video.
 
 ## Keš i runovi
 

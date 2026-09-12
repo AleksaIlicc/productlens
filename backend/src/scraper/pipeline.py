@@ -292,13 +292,8 @@ def _build_payload(
         ScrapedOffer(
             url=page.final_url or page.url,
             domain=page.domain,
-            region=page.region,
             title=page.facts.title,
             brand=page.facts.brand,
-            price=page.facts.price,
-            availability=page.facts.availability,
-            sku=page.facts.sku,
-            gtin=page.facts.gtin,
             images=gallery_urls(page.images, get_scraper_settings().max_images),
             specs=page.facts.specs,
             description=page.facts.description,
