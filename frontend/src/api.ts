@@ -61,6 +61,75 @@ export type CompareResponse = {
   comparison: Comparison;
 };
 
+// One run, stage by stage — the progress rail the run screen draws.
+export type Stage =
+  | 'search'
+  | 'rank'
+  | 'scrape'
+  | 'vision'
+  | 'audit'
+  | 'report';
+
+export type JobEvent = {
+  seq: number;
+  at_ms: number;
+  stage: Stage;
+  message: string;
+  detail: string;
+  tone: 'info' | 'ok' | 'warn';
+  data: {
+    // Running totals, sent by whichever stage learns them.
+    shops?: number;
+    candidates?: number;
+    pages?: number;
+    photos?: number;
+    // One page, as it lands.
+    domain?: string;
+    url?: string;
+    final_url?: string;
+    region?: string;
+    page_status?: string;
+    from_cache?: boolean;
+    // The listing a photo batch belongs to.
+    source?: string;
+    images?: string[];
+    targets?: { domain: string; url: string }[];
+    domains?: string[];
+    queries?: string[];
+    a?: string;
+    b?: string;
+  };
+};
+
+export type RunStats = {
+  run_id: string;
+  elapsed_ms: number;
+  candidates: number;
+  scraped_ok: number;
+  scraped_failed: number;
+  images: number;
+  queries_used: string[];
+  warnings: string[];
+};
+
+export type AnalyzeResult = {
+  query: string;
+  run: RunStats | null;
+  products: Product[];
+  pair: string[];
+  comparison: CompareResponse | null;
+};
+
+export type JobState = {
+  job_id: string;
+  status: 'running' | 'done' | 'error';
+  error: string;
+  elapsed_ms: number;
+  cursor: number;
+  events: JobEvent[];
+  result: AnalyzeResult | null;
+};
+
 // Every image is a remote URL from a live search result; route it through the
 // scraper's proxy so shop hotlink-protection can't blank it out.
 export const imageUrl = (url: string) =>
@@ -70,16 +139,23 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
   if (!res.ok) {
     const body = await res.json().catch(() => null);
-    throw new Error(body?.detail ?? `Zahtev nije uspeo (${res.status})`);
+    throw new Error(body?.detail ?? `Request failed (${res.status})`);
   }
   return res.json();
 }
 
-// `a`/`b` are built client-side from a live search result — see
-// offerToProduct in search.ts.
-export const fetchComparison = (a: Product, b: Product) =>
-  request<CompareResponse>('/api/compare', {
+const post = <T>(url: string, body: unknown) =>
+  request<T>(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ a, b }),
+    body: JSON.stringify(body),
   });
+
+export const startAnalysis = (query: string) =>
+  post<{ job_id: string }>('/api/analyze', { query });
+
+export const startComparison = (a: Product, b: Product) =>
+  post<{ job_id: string }>('/api/analyze/compare', { a, b });
+
+export const fetchJob = (jobId: string, cursor: number) =>
+  request<JobState>(`/api/analyze/${jobId}?cursor=${cursor}`);

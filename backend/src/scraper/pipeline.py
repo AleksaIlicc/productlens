@@ -5,6 +5,7 @@
 import asyncio
 import uuid
 from datetime import datetime, timezone
+from typing import Any, Protocol
 
 from scraper import cache, merge
 from scraper.extract import extract_facts
@@ -25,9 +26,32 @@ from scraper.providers import exa, firecrawl
 from scraper.settings import get_scraper_settings
 from scraper.urls import canonicalize, domain_of
 
+
+class Progress(Protocol):
+    """What `discover` reports as it goes; see `Job.emit` in jobs.py."""
+
+    def __call__(
+        self,
+        stage: str,
+        message: str,
+        *,
+        detail: str = ...,
+        tone: str = ...,
+        **data: Any,
+    ) -> None: ...
+
+
+def _silent(stage: str, message: str, **_: Any) -> None:
+    return None
+
+
 MAP_DOMAINS_LIMIT = 4
 # Below this, with no images, a page almost certainly did not finish rendering.
 THIN_MARKDOWN_CHARS = 2500
+
+
+def plural(count: int, noun: str, suffix: str = "s") -> str:
+    return f"{count} {noun}" if count == 1 else f"{count} {noun}{suffix}"
 
 
 def _now_iso() -> str:
@@ -212,15 +236,41 @@ def _finalize_page(
 async def _scrape_pages(
     req: DiscoverRequest,
     picks: list[Candidate],
+    progress: Progress = _silent,
 ) -> tuple[list[ScrapedPage], list[ProviderCall]]:
     if not picks:
         return [], []
+
+    # `page.url` is the URL we asked for, so it matches the target the UI is
+    # already showing; two pages from one shop stay two separate entries.
+    reported: dict[str, str] = {}
+
+    def landed(page: ScrapedPage) -> None:
+        reported[page.url] = page.status
+        progress(
+            "scrape",
+            page.domain,
+            detail=(
+                f"{page.markdown_chars:,} characters, "
+                f"{plural(len(page.images), 'image')}"
+                if page.status == "ok"
+                else page.error or f"page {page.status}"
+            ),
+            tone="ok" if page.status == "ok" else "warn",
+            url=page.url,
+            final_url=page.final_url or page.url,
+            domain=page.domain,
+            region=page.region,
+            page_status=page.status,
+            from_cache=page.from_cache,
+        )
 
     by_url = {c.url: c for c in picks}
     scraped, calls = await firecrawl.scrape_many(
         [c.url for c in picks],
         use_cache=req.use_cache,
         max_markdown_chars=req.max_markdown_chars,
+        on_page=landed,
     )
 
     pages: list[ScrapedPage] = []
@@ -273,6 +323,12 @@ async def _scrape_pages(
         _finalize_page(page, structured_by_url.get(page.url, ""), by_url.get(page.url))
         for page in pages
     ]
+    # A retry or the Exa fallback can rescue a page that first came back
+    # blocked; say so rather than leaving the earlier failure standing.
+    for page in finalized:
+        if reported.get(page.url) == page.status:
+            continue
+        landed(page)
     return finalized, calls
 
 
@@ -344,63 +400,83 @@ def _warnings(
     warnings: list[str] = []
     if not settings.firecrawl_api_key:
         warnings.append(
-            "FIRECRAWL_API_KEY nije postavljen — Firecrawl pozivi su preskočeni."
+            "FIRECRAWL_API_KEY is not set - Firecrawl calls were skipped."
         )
     if not settings.exa_api_key:
-        warnings.append("EXA_API_KEY nije postavljen — Exa pozivi su preskočeni.")
+        warnings.append("EXA_API_KEY is not set - Exa calls were skipped.")
     if candidates and candidates[0].score < 4.0:
         warnings.append(
-            "Rezultati slabo odgovaraju upitu — proveri naziv ili dodaj brend."
+            "Results match the query poorly - check the name or add the brand."
         )
     if not candidates:
         warnings.append(
-            "Nijedan link nije pronađen. Proveri naziv ili skloni filtere domena."
+            "No links found. Check the product name or drop the domain filters."
         )
     if req.scope == "both" and candidates:
         if not totals.candidates_rs and not totals.candidates_regional:
             warnings.append(
-                "Nema srpskih (.rs) rezultata za ovaj upit — prikazani su samo svetski."
+                "No Serbian (.rs) results for this query - only international ones."
             )
         if not totals.candidates_world:
             warnings.append(
-                "Nema svetskih rezultata za ovaj upit — prikazani su samo domaći."
+                "No international results for this query - only local ones."
             )
         if totals.scraped_ok and not totals.scraped_world:
             warnings.append(
-                "Skrejpovane su samo domaće strane; svetske nisu prošle skrejpovanje."
+                "Only local pages were scraped; the international ones failed."
             )
         if totals.scraped_ok and not totals.scraped_rs:
             warnings.append(
-                "Skrejpovane su samo svetske strane; domaće nisu prošle skrejpovanje."
+                "Only international pages were scraped; the local ones failed."
             )
     if pages and totals.scraped_ok == 0:
         blocked = [p.domain for p in pages if p.status == "blocked"]
         warnings.append(
-            "Nijedna strana nije skrejpovana"
-            + (f" (blokirano: {', '.join(sorted(set(blocked)))})" if blocked else "")
+            "No page could be scraped"
+            + (f" (blocked: {', '.join(sorted(set(blocked)))})" if blocked else "")
         )
     missing_price = [
         p.domain for p in pages if p.status == "ok" and p.facts.price.amount is None
     ]
     if missing_price:
         warnings.append(
-            "Cena nije prepoznata na: " + ", ".join(sorted(set(missing_price)))
+            "No price recognised on: " + ", ".join(sorted(set(missing_price)))
         )
     no_images = [p.domain for p in pages if p.status == "ok" and not p.images]
     if no_images:
-        warnings.append("Nema slika sa: " + ", ".join(sorted(set(no_images))))
+        warnings.append("No images from: " + ", ".join(sorted(set(no_images))))
     truncated = [p.domain for p in pages if p.truncated]
     if truncated:
-        warnings.append("Markdown je skraćen za: " + ", ".join(sorted(set(truncated))))
+        warnings.append("Page text was truncated for: " + ", ".join(sorted(set(truncated))))
     return warnings
 
 
-async def discover(req: DiscoverRequest) -> DiscoverResponse:
+async def discover(
+    req: DiscoverRequest, progress: Progress = _silent
+) -> DiscoverResponse:
     loop = asyncio.get_running_loop()
     started = loop.time()
     run_id, started_at = _run_id(), _now_iso()
 
+    plan = build_queries(req.query, scope=req.scope)
+    planned = sorted({q for group in plan.values() for q in group})
+    progress(
+        "search",
+        f"Searching {' + '.join(sorted(req.providers))} for “{req.query}”",
+        detail=plural(len(planned), "query variant"),
+        queries=planned,
+    )
+
     hits, calls = await _run_searches(req)
+    progress(
+        "search",
+        plural(len(hits), "raw result"),
+        detail=f"{plural(len(calls), 'provider call')}, "
+        f"{plural(len({h.domain for h in hits}), 'domain')}",
+        tone="ok",
+        hits=len(hits),
+        shops=len({h.domain for h in hits}),
+    )
     if req.deep_domain_map:
         map_hits, map_calls = await _deep_map(req, {h.domain for h in hits})
         hits.extend(map_hits)
@@ -415,6 +491,15 @@ async def discover(req: DiscoverRequest) -> DiscoverResponse:
         exclude_domains=req.exclude_domains,
     )[: req.limit_candidates]
 
+    progress(
+        "rank",
+        f"{plural(len(candidates), 'candidate page')} ranked",
+        detail=", ".join(dict.fromkeys(c.domain for c in candidates[:6])),
+        tone="ok",
+        candidates=len(candidates),
+        domains=[c.domain for c in candidates[:12]],
+    )
+
     picks = merge.pick_to_scrape(
         candidates,
         n=req.scrape_top,
@@ -425,11 +510,28 @@ async def discover(req: DiscoverRequest) -> DiscoverResponse:
     for candidate in candidates:
         candidate.scraped = candidate.canonical_url in picked_keys
 
-    pages, scrape_calls = await _scrape_pages(req, picks)
+    progress(
+        "scrape",
+        f"Opening {plural(len(picks), 'page')}",
+        detail=", ".join(c.domain for c in picks),
+        targets=[{"domain": c.domain, "url": c.url} for c in picks],
+    )
+    pages, scrape_calls = await _scrape_pages(req, picks, progress)
     calls.extend(scrape_calls)
 
     totals = _totals(hits, candidates, pages, calls)
-    queries = build_queries(req.query, scope=req.scope)
+    progress(
+        "scrape",
+        f"{plural(totals.scraped_ok, 'listing')} read, "
+        f"{plural(totals.images, 'product photo')} found",
+        detail=f"{plural(totals.scraped_failed, 'page')} unreadable"
+        if totals.scraped_failed
+        else "every page came back",
+        tone="ok",
+        pages=totals.scraped_ok,
+        photos=totals.images,
+    )
+    queries = plan
     response = DiscoverResponse(
         run_id=run_id,
         query=req.query,
@@ -460,7 +562,7 @@ async def scrape_one(req: ScrapeOneRequest) -> ScrapedPage:
                 url=url,
                 domain=domain_of(url),
                 status="error",
-                error="nema rezultata",
+                error="no results",
             )
         )
         return _finalize_page(page, "", None)

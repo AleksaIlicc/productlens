@@ -62,13 +62,13 @@ PRICE_NEAR_CURRENCY_RE = re.compile(
 AVAILABILITY_PATTERNS = (
     (
         r"nema\s+na\s+stanju|nije\s+dostupn|trenutno\s+nedostupn|rasprodato|out\s+of\s+stock|outofstock",
-        "Nema na stanju",
+        "Out of stock",
     ),
     (
         r"na\s+stanju|dostupno|raspolo[žz]ivo|in\s*stock|instock|na\s+lageru",
-        "Na stanju",
+        "In stock",
     ),
-    (r"po\s+narud[žz]bi|preorder|uskoro", "Po narudžbini"),
+    (r"po\s+narud[žz]bi|preorder|uskoro", "On order"),
 )
 
 SKU_LABEL_RE = re.compile(
@@ -341,9 +341,9 @@ def _from_json_ld(nodes: list[dict], facts: PageFacts) -> bool:
             availability = str(node.get("availability") or "")
             if availability and not facts.availability:
                 facts.availability = (
-                    "Na stanju"
+                    "In stock"
                     if "instock" in availability.lower().replace("_", "")
-                    else "Nema na stanju"
+                    else "Out of stock"
                 )
         if "breadcrumblist" in types and not facts.breadcrumbs:
             crumbs: list[str] = []
@@ -378,9 +378,9 @@ def _from_microdata(html: str, facts: PageFacts) -> bool:
         used = True
     if "availability" in props and not facts.availability:
         facts.availability = (
-            "Na stanju"
+            "In stock"
             if "instock" in props["availability"].lower().replace("_", "")
-            else "Nema na stanju"
+            else "Out of stock"
         )
         used = True
     for key, target in (
@@ -453,7 +453,7 @@ def _from_meta(metadata: dict[str, str], facts: PageFacts) -> bool:
     availability = _first_meta(metadata, META_AVAIL_KEYS)
     if availability and not facts.availability:
         facts.availability = (
-            "Na stanju"
+            "In stock"
             if "instock" in availability.lower().replace(" ", "").replace("_", "")
             else availability[:60]
         )

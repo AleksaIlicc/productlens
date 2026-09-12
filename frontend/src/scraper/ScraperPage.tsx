@@ -45,20 +45,20 @@ const DEFAULT_OPTIONS: DiscoverRequest = {
 };
 
 const SCOPE_LABEL: Record<Scope, string> = {
-  both: 'Srbija + svet',
-  rs: 'samo Srbija',
-  world: 'samo svet',
+  both: 'Serbia + international',
+  rs: 'Serbia only',
+  world: 'international only',
 };
 
 const PAGE_TYPE_LABEL: Record<string, string> = {
-  product: 'proizvod',
-  category: 'kategorija',
-  brand: 'brend',
+  product: 'product',
+  category: 'category',
+  brand: 'brand',
   marketplace: 'marketplace',
-  price_comparison: 'poređivač cena',
-  article: 'članak',
+  price_comparison: 'price comparison',
+  article: 'article',
   video: 'video',
-  unknown: 'nepoznato',
+  unknown: 'unknown',
 };
 
 function loadOptions(): DiscoverRequest {
@@ -77,7 +77,7 @@ function loadOptions(): DiscoverRequest {
 const formatPrice = (price: PriceInfo) =>
   price.amount === null
     ? price.raw || ''
-    : `${price.amount.toLocaleString('sr-RS')} ${price.currency || '?'}`;
+    : `${price.amount.toLocaleString('en-US')} ${price.currency || '?'}`;
 
 const csv = (values: string[]) => values.join(', ');
 const parseCsv = (value: string) =>
@@ -89,18 +89,18 @@ const parseCsv = (value: string) =>
 function Totals({ run }: { run: DiscoverResponse }) {
   const t = run.totals;
   const items: [string, string][] = [
-    ['trajanje', `${(run.elapsed_ms / 1000).toFixed(1)} s`],
-    ['kandidati', `${t.candidates}`],
+    ['duration', `${(run.elapsed_ms / 1000).toFixed(1)} s`],
+    ['candidates', `${t.candidates}`],
     [
-      'Srbija / region / svet',
+      'Serbia / regional / world',
       `${t.candidates_rs} / ${t.candidates_regional} / ${t.candidates_world}`,
     ],
-    ['skrejpovano', `${t.scraped_ok} ok, ${t.scraped_failed} pad`],
-    ['skrejp rs / svet', `${t.scraped_rs} / ${t.scraped_world}`],
-    ['slike', `${t.images}`],
-    ['Firecrawl krediti', `${t.firecrawl_credits}`],
-    ['Exa trošak', `$${t.exa_cost_usd.toFixed(4)}`],
-    ['iz keša', `${t.cache_hits}`],
+    ['scraped', `${t.scraped_ok} ok, ${t.scraped_failed} failed`],
+    ['scraped rs / world', `${t.scraped_rs} / ${t.scraped_world}`],
+    ['images', `${t.images}`],
+    ['Firecrawl credits', `${t.firecrawl_credits}`],
+    ['Exa cost', `$${t.exa_cost_usd.toFixed(4)}`],
+    ['from cache', `${t.cache_hits}`],
   ];
   return (
     <div
@@ -119,25 +119,25 @@ function Totals({ run }: { run: DiscoverResponse }) {
 
 function ProviderCalls({ run }: { run: DiscoverResponse }) {
   return (
-    <Collapsible title={`Pozivi provajdera (${run.provider_calls.length})`}>
+    <Collapsible title={`Provider calls (${run.provider_calls.length})`}>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[52rem] text-left text-xs">
-          <thead className="text-slate-500 dark:text-slate-400">
+          <thead className="text-ink-50">
             <tr>
-              <th className="py-1 pr-3">provajder</th>
+              <th className="py-1 pr-3">provider</th>
               <th className="py-1 pr-3">endpoint</th>
-              <th className="py-1 pr-3">upit</th>
+              <th className="py-1 pr-3">query</th>
               <th className="py-1 pr-3">status</th>
               <th className="py-1 pr-3">ms</th>
-              <th className="py-1 pr-3">rezultata</th>
-              <th className="py-1 pr-3">cena</th>
+              <th className="py-1 pr-3">results</th>
+              <th className="py-1 pr-3">cost</th>
             </tr>
           </thead>
           <tbody>
             {run.provider_calls.map((call) => (
               <tr
                 key={`${call.provider}-${call.endpoint}-${call.query}-${call.elapsed_ms}-${call.results}`}
-                className="border-t border-slate-100 dark:border-slate-800"
+                className="border-t border-line"
               >
                 <td className="py-1 pr-3">{call.provider}</td>
                 <td className="py-1 pr-3">{call.endpoint}</td>
@@ -149,19 +149,19 @@ function ProviderCalls({ run }: { run: DiscoverResponse }) {
                 </td>
                 <td className="py-1 pr-3">
                   {call.from_cache ? (
-                    <Badge tone="blue">keš</Badge>
+                    <Badge tone="blue">cache</Badge>
                   ) : call.ok ? (
                     <Badge tone="green">ok {call.http_status ?? ''}</Badge>
                   ) : (
                     <Badge tone="rose" title={call.error}>
-                      greška {call.http_status ?? ''}
+                      error {call.http_status ?? ''}
                     </Badge>
                   )}
                 </td>
                 <td className="py-1 pr-3">{call.elapsed_ms}</td>
                 <td className="py-1 pr-3">{call.results}</td>
                 <td className="py-1 pr-3">
-                  {call.credits_used ? `${call.credits_used} kr` : ''}
+                  {call.credits_used ? `${call.credits_used} cr` : ''}
                   {call.cost_usd ? `$${call.cost_usd.toFixed(4)}` : ''}
                 </td>
               </tr>
@@ -193,16 +193,16 @@ function CandidateTable({
     world: candidates.filter((c) => c.region === 'world').length,
   };
   const filters: ['all' | Region, string][] = [
-    ['all', `sve (${counts.all})`],
-    ['rs', `Srbija (${counts.rs})`],
-    ['regional', `region (${counts.regional})`],
-    ['world', `svet (${counts.world})`],
+    ['all', `all (${counts.all})`],
+    ['rs', `Serbia (${counts.rs})`],
+    ['regional', `regional (${counts.regional})`],
+    ['world', `international (${counts.world})`],
   ];
 
   return (
     <section className={`${card} p-4`}>
       <div className="mb-3 flex flex-wrap items-center gap-2">
-        <h2 className="mr-2 font-semibold">Pronađeni linkovi</h2>
+        <h2 className="mr-2 font-semibold">Links found</h2>
         {filters.map(([value, label]) => (
           <button
             key={value}
@@ -210,8 +210,8 @@ function CandidateTable({
             onClick={() => setRegionFilter(value)}
             className={`rounded-md px-2 py-1 text-xs ${
               regionFilter === value
-                ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900'
-                : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                ? 'bg-wine text-cream'
+                : 'bg-shell text-ink-70'
             }`}
           >
             {label}
@@ -220,15 +220,15 @@ function CandidateTable({
       </div>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[60rem] text-left text-sm">
-          <thead className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
+          <thead className="eyebrow text-ink-50">
             <tr>
               <th className="py-1 pr-2">#</th>
-              <th className="py-1 pr-2">skor</th>
+              <th className="py-1 pr-2">score</th>
               <th className="py-1 pr-2">region</th>
-              <th className="py-1 pr-2">tip</th>
-              <th className="py-1 pr-2">domen</th>
-              <th className="py-1 pr-2">naslov</th>
-              <th className="py-1 pr-2">izvor</th>
+              <th className="py-1 pr-2">type</th>
+              <th className="py-1 pr-2">domain</th>
+              <th className="py-1 pr-2">title</th>
+              <th className="py-1 pr-2">source</th>
               <th className="py-1 pr-2" />
             </tr>
           </thead>
@@ -236,9 +236,9 @@ function CandidateTable({
             {shown.map((candidate, index) => (
               <tr
                 key={candidate.canonical_url}
-                className="border-t border-slate-100 align-top dark:border-slate-800"
+                className="border-t border-line align-top"
               >
-                <td className="py-2 pr-2 text-slate-400">{index + 1}</td>
+                <td className="py-2 pr-2 text-ink-50">{index + 1}</td>
                 <td className="py-2 pr-2">
                   <span
                     className="cursor-help font-mono text-xs"
@@ -266,17 +266,17 @@ function CandidateTable({
                     href={candidate.url}
                     target="_blank"
                     rel="noreferrer"
-                    className="line-clamp-2 text-sky-700 hover:underline dark:text-sky-400"
+                    className="line-clamp-2 text-wine hover:underline"
                   >
                     {candidate.title || candidate.url}
                   </a>
                   {candidate.images.length > 0 && (
-                    <span className="mt-1 block text-xs text-slate-400">
-                      {candidate.images.length} slika iz pretrage
+                    <span className="mt-1 block text-xs text-ink-50">
+                      {candidate.images.length} images from search
                     </span>
                   )}
                 </td>
-                <td className="py-2 pr-2 text-xs text-slate-500 dark:text-slate-400">
+                <td className="py-2 pr-2 text-xs text-ink-50">
                   {candidate.providers.join('+')}
                   {candidate.best_position
                     ? ` · #${candidate.best_position}`
@@ -284,17 +284,15 @@ function CandidateTable({
                 </td>
                 <td className="py-2 pr-2">
                   {candidate.scraped ? (
-                    <Badge tone="green">skrejpovan</Badge>
+                    <Badge tone="green">scraped</Badge>
                   ) : (
                     <button
                       type="button"
                       onClick={() => onScrape(candidate.url)}
                       disabled={scrapingUrl === candidate.url}
-                      className="rounded-md bg-slate-100 px-2 py-1 text-xs hover:bg-slate-200 disabled:opacity-50 dark:bg-slate-800 dark:hover:bg-slate-700"
+                      className="rounded-md border border-line-strong bg-paper px-2 py-1 text-xs hover:bg-shell disabled:opacity-40"
                     >
-                      {scrapingUrl === candidate.url
-                        ? 'skrejpujem…'
-                        : 'Skrejpuj'}
+                      {scrapingUrl === candidate.url ? 'scraping…' : 'Scrape'}
                     </button>
                   )}
                 </td>
@@ -304,7 +302,7 @@ function CandidateTable({
         </table>
       </div>
       {!shown.length && (
-        <p className="text-sm text-slate-500">Nema kandidata za ovaj filter.</p>
+        <p className="text-sm text-ink-50">No candidates match this filter.</p>
       )}
     </section>
   );
@@ -321,45 +319,45 @@ function PageCard({ page }: { page: ScrapedPage }) {
         <Badge>{page.fetched_with ?? '—'}</Badge>
         {page.http_status !== null && <Badge>HTTP {page.http_status}</Badge>}
         <Badge>{page.elapsed_ms} ms</Badge>
-        {page.from_cache && <Badge tone="blue">iz keša</Badge>}
-        <Badge title="dužina markdown-a">{page.markdown_chars} znakova</Badge>
-        {page.truncated && <Badge tone="amber">skraćeno</Badge>}
+        {page.from_cache && <Badge tone="blue">from cache</Badge>}
+        <Badge title="length of the page text">
+          {page.markdown_chars} chars
+        </Badge>
+        {page.truncated && <Badge tone="amber">truncated</Badge>}
         <a
           href={page.final_url || page.url}
           target="_blank"
           rel="noreferrer"
-          className="ml-auto text-sm text-sky-700 hover:underline dark:text-sky-400"
+          className="ml-auto text-sm text-wine hover:underline"
         >
-          otvori stranu ↗
+          open page ↗
         </a>
       </header>
 
-      {page.error && (
-        <p className="text-sm text-rose-700 dark:text-rose-400">{page.error}</p>
-      )}
+      {page.error && <p className="text-sm text-bad">{page.error}</p>}
 
       <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-        <Field label="naslov" value={f.title} />
-        <Field label="brend" value={f.brand} />
+        <Field label="title" value={f.title} />
+        <Field label="brand" value={f.brand} />
         <Field
-          label="cena"
+          label="price"
           value={
             <span>
               {formatPrice(f.price) || '—'}
               {f.old_price && (
-                <span className="ml-2 text-slate-400 line-through">
+                <span className="ml-2 text-ink-50 line-through">
                   {formatPrice(f.old_price)}
                 </span>
               )}
             </span>
           }
         />
-        <Field label="sirova cena" value={f.price.raw} />
-        <Field label="dostupnost" value={f.availability} />
+        <Field label="raw price" value={f.price.raw} />
+        <Field label="availability" value={f.availability} />
         <Field label="SKU" value={f.sku} />
         <Field label="GTIN / EAN" value={f.gtin} />
         <Field
-          label="popunjenost"
+          label="completeness"
           value={`${Math.round(f.completeness * 100)}%`}
         />
       </dl>
@@ -379,28 +377,23 @@ function PageCard({ page }: { page: ScrapedPage }) {
       </div>
 
       {f.breadcrumbs.length > 0 && (
-        <p className="text-xs text-slate-500 dark:text-slate-400">
-          {f.breadcrumbs.join(' › ')}
-        </p>
+        <p className="text-xs text-ink-50">{f.breadcrumbs.join(' › ')}</p>
       )}
 
       <div>
         <h3 className="mb-2 text-sm font-medium">
-          Slike ({page.images.length})
+          Images ({page.images.length})
         </h3>
         <ImageGrid images={page.images} />
       </div>
 
       {Object.keys(f.specs).length > 0 && (
-        <Collapsible title={`Specifikacija (${Object.keys(f.specs).length})`}>
+        <Collapsible title={`Specification (${Object.keys(f.specs).length})`}>
           <table className="w-full text-left text-sm">
             <tbody>
               {Object.entries(f.specs).map(([key, value]) => (
-                <tr
-                  key={key}
-                  className="border-t border-slate-100 dark:border-slate-800"
-                >
-                  <th className="w-1/3 py-1 pr-3 font-normal text-slate-500 dark:text-slate-400">
+                <tr key={key} className="border-t border-line">
+                  <th className="w-1/3 py-1 pr-3 font-normal text-ink-50">
                     {key}
                   </th>
                   <td className="py-1">{value}</td>
@@ -412,21 +405,19 @@ function PageCard({ page }: { page: ScrapedPage }) {
       )}
 
       {f.description && (
-        <Collapsible title="Opis">
-          <p className="text-sm text-slate-700 dark:text-slate-300">
-            {f.description}
-          </p>
+        <Collapsible title="Description">
+          <p className="text-sm text-ink-70">{f.description}</p>
         </Collapsible>
       )}
 
-      <Collapsible title="Markdown sa strane">
-        <pre className="max-h-80 overflow-auto rounded-lg bg-slate-50 p-3 text-xs whitespace-pre-wrap dark:bg-slate-950">
-          {page.markdown || '(prazno)'}
+      <Collapsible title="Page text">
+        <pre className="max-h-80 overflow-auto rounded-lg bg-cream p-3 text-xs whitespace-pre-wrap">
+          {page.markdown || '(empty)'}
         </pre>
       </Collapsible>
 
-      <Collapsible title={`Metapodaci (${Object.keys(page.metadata).length})`}>
-        <pre className="max-h-64 overflow-auto rounded-lg bg-slate-50 p-3 text-xs dark:bg-slate-950">
+      <Collapsible title={`Metadata (${Object.keys(page.metadata).length})`}>
+        <pre className="max-h-64 overflow-auto rounded-lg bg-cream p-3 text-xs">
           {JSON.stringify(page.metadata, null, 2)}
         </pre>
       </Collapsible>
@@ -506,15 +497,17 @@ export default function ScraperPage() {
     if (!run) return;
     copyToClipboard(JSON.stringify(run.payload, null, 2))
       .then(() => setCopied('payload'))
-      .catch(() => setCopied('greška'));
+      .catch(() => setCopied('error'));
     setTimeout(() => setCopied(''), 2000);
   };
 
   return (
-    <div className="mx-auto max-w-7xl space-y-4 p-4 text-slate-900 dark:text-slate-100">
+    <div className="mx-auto max-w-7xl space-y-4 p-4 text-ink">
       <header className="flex flex-wrap items-center gap-2">
-        <h1 className="text-xl font-bold">Scraper</h1>
-        <Badge tone="amber">napredni prikaz</Badge>
+        <h1 className="text-xl font-extrabold tracking-tight">
+          Scraper console
+        </h1>
+        <Badge tone="amber">advanced view</Badge>
         {health.data && (
           <>
             <Badge tone={health.data.firecrawl_key ? 'green' : 'rose'}>
@@ -524,12 +517,12 @@ export default function ScraperPage() {
               Exa: {health.data.exa_ping}
             </Badge>
             <Badge tone={health.data.cache_enabled ? 'blue' : 'slate'}>
-              keš: {health.data.cache_enabled ? 'uključen' : 'isključen'}
+              cache: {health.data.cache_enabled ? 'on' : 'off'}
             </Badge>
           </>
         )}
-        <span className="ml-auto text-xs text-slate-500 dark:text-slate-400">
-          samo pretraga + skrejpovanje, bez LLM obrade
+        <span className="ml-auto text-xs text-ink-50">
+          search + scraping only, no LLM step
         </span>
       </header>
 
@@ -539,14 +532,14 @@ export default function ScraperPage() {
             value={options.query}
             onChange={(e) => setOptions({ ...options, query: e.target.value })}
             placeholder="Vichy Dermablend Corrector 35 Sand"
-            className="min-w-[18rem] flex-1 rounded-lg border border-slate-300 px-3 py-2 dark:border-slate-700 dark:bg-slate-950"
+            className="min-w-[18rem] flex-1 rounded-lg border border-line-strong bg-paper px-3 py-2"
           />
           <select
             value={options.scope}
             onChange={(e) =>
               setOptions({ ...options, scope: e.target.value as Scope })
             }
-            className="rounded-lg border border-slate-300 px-3 py-2 dark:border-slate-700 dark:bg-slate-950"
+            className="rounded-lg border border-line-strong bg-paper px-3 py-2"
           >
             {(Object.keys(SCOPE_LABEL) as Scope[]).map((scope) => (
               <option key={scope} value={scope}>
@@ -557,16 +550,16 @@ export default function ScraperPage() {
           <button
             type="submit"
             disabled={busy || !options.query.trim()}
-            className="rounded-lg bg-slate-900 px-4 py-2 font-medium text-white disabled:opacity-50 dark:bg-slate-100 dark:text-slate-900"
+            className="rounded-lg bg-wine px-4 py-2 font-semibold text-cream disabled:opacity-40"
           >
-            {discovery.isPending ? 'Tražim…' : 'Pretraži'}
+            {discovery.isPending ? 'Searching…' : 'Search'}
           </button>
         </div>
 
-        <Collapsible title="Napredno">
+        <Collapsible title="Advanced">
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
             <label className="text-sm">
-              strana za skrejp
+              pages to scrape
               <input
                 type="number"
                 min={0}
@@ -575,11 +568,11 @@ export default function ScraperPage() {
                 onChange={(e) =>
                   setOptions({ ...options, scrape_top: Number(e.target.value) })
                 }
-                className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1 dark:border-slate-700 dark:bg-slate-950"
+                className="mt-1 w-full rounded-lg border border-line-strong bg-paper px-2 py-1"
               />
             </label>
             <label className="text-sm">
-              max kandidata
+              max candidates
               <input
                 type="number"
                 min={1}
@@ -591,11 +584,11 @@ export default function ScraperPage() {
                     limit_candidates: Number(e.target.value),
                   })
                 }
-                className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1 dark:border-slate-700 dark:bg-slate-950"
+                className="mt-1 w-full rounded-lg border border-line-strong bg-paper px-2 py-1"
               />
             </label>
             <label className="text-sm">
-              min. domaćih strana
+              min. local pages
               <input
                 type="number"
                 min={0}
@@ -607,11 +600,11 @@ export default function ScraperPage() {
                     min_rs_pages: Number(e.target.value),
                   })
                 }
-                className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1 dark:border-slate-700 dark:bg-slate-950"
+                className="mt-1 w-full rounded-lg border border-line-strong bg-paper px-2 py-1"
               />
             </label>
             <label className="text-sm">
-              min. svetskih strana
+              min. international pages
               <input
                 type="number"
                 min={0}
@@ -623,11 +616,11 @@ export default function ScraperPage() {
                     min_world_pages: Number(e.target.value),
                   })
                 }
-                className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1 dark:border-slate-700 dark:bg-slate-950"
+                className="mt-1 w-full rounded-lg border border-line-strong bg-paper px-2 py-1"
               />
             </label>
             <label className="text-sm sm:col-span-2">
-              samo domeni (odvoji zapetom)
+              only these domains (comma separated)
               <input
                 value={csv(options.include_domains)}
                 onChange={(e) =>
@@ -637,11 +630,11 @@ export default function ScraperPage() {
                   })
                 }
                 placeholder="lilly.rs, notino.com"
-                className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1 dark:border-slate-700 dark:bg-slate-950"
+                className="mt-1 w-full rounded-lg border border-line-strong bg-paper px-2 py-1"
               />
             </label>
             <label className="text-sm sm:col-span-2">
-              izbaci domene
+              exclude domains
               <input
                 value={csv(options.exclude_domains)}
                 onChange={(e) =>
@@ -651,7 +644,7 @@ export default function ScraperPage() {
                   })
                 }
                 placeholder="amazon.com"
-                className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1 dark:border-slate-700 dark:bg-slate-950"
+                className="mt-1 w-full rounded-lg border border-line-strong bg-paper px-2 py-1"
               />
             </label>
           </div>
@@ -684,7 +677,7 @@ export default function ScraperPage() {
                   })
                 }
               />
-              pretraga slika
+              image search
             </label>
             <label className="flex items-center gap-2">
               <input
@@ -694,7 +687,7 @@ export default function ScraperPage() {
                   setOptions({ ...options, deep_domain_map: e.target.checked })
                 }
               />
-              duboka pretraga po domenima (sporije)
+              deep domain map (slower)
             </label>
             <label className="flex items-center gap-2">
               <input
@@ -704,32 +697,30 @@ export default function ScraperPage() {
                   setOptions({ ...options, use_cache: e.target.checked })
                 }
               />
-              koristi keš
+              use cache
             </label>
           </div>
         </Collapsible>
       </form>
 
       {error && (
-        <p
-          className={`${card} border-rose-300 p-3 text-sm text-rose-700 dark:border-rose-900 dark:text-rose-400`}
-        >
+        <p className={`${card} border-bad-line bg-bad-bg p-3 text-sm text-bad`}>
           {error}
         </p>
       )}
 
       {discovery.isPending && (
-        <p className="text-sm text-slate-500 dark:text-slate-400">
-          Pretražujem Firecrawl i Exa, pa skrejpujem najbolje strane — traje
+        <p className="text-sm text-ink-50">
+          Searching Firecrawl and Exa, then scraping the best pages — takes
           15–60 s.
         </p>
       )}
 
       {!run && !discovery.isPending && (
-        <p className={`${card} p-4 text-sm text-slate-500 dark:text-slate-400`}>
-          Unesi naziv proizvoda (npr. „Vichy Dermablend Corrector 35 Sand“) i
-          pokreni pretragu. Dobijaš sve linkove koje nađemo — domaće i svetske —
-          sa cenama, podacima i slikama, plus JSON spreman za LLM korak.
+        <p className={`${card} p-4 text-sm text-ink-50`}>
+          Enter a product name and run a search. You get every link found —
+          local and international — with prices, extracted facts and images,
+          plus the JSON payload the LLM step consumes.
         </p>
       )}
 
@@ -738,20 +729,16 @@ export default function ScraperPage() {
           <Totals run={run} />
 
           {run.warnings.length > 0 && (
-            <ul
-              className={`${card} space-y-1 p-4 text-sm text-amber-700 dark:text-amber-400`}
-            >
+            <ul className={`${card} space-y-1 p-4 text-sm text-warn`}>
               {run.warnings.map((warning) => (
                 <li key={warning}>⚠ {warning}</li>
               ))}
             </ul>
           )}
 
-          <div
-            className={`${card} space-y-2 p-4 text-xs text-slate-500 dark:text-slate-400`}
-          >
+          <div className={`${card} space-y-2 p-4 text-xs text-ink-50`}>
             <div>
-              <span className="font-medium">upiti:</span>{' '}
+              <span className="font-semibold">queries:</span>{' '}
               {run.queries_used.map((q) => (
                 <code key={q} className="mr-2">
                   {q}
@@ -768,9 +755,7 @@ export default function ScraperPage() {
           />
 
           <section className="space-y-3">
-            <h2 className="font-semibold">
-              Skrejpovane strane ({pages.length})
-            </h2>
+            <h2 className="font-semibold">Scraped pages ({pages.length})</h2>
             {pages.map((page) => (
               <PageCard
                 key={`${page.canonical_url}-${page.fetched_with}`}
@@ -783,34 +768,35 @@ export default function ScraperPage() {
             <button
               type="button"
               onClick={copyPayload}
-              className="rounded-lg bg-slate-900 px-3 py-2 text-sm text-white dark:bg-slate-100 dark:text-slate-900"
+              className="rounded-lg bg-wine px-3 py-2 text-sm font-semibold text-cream"
             >
-              {copied === 'payload' ? 'Kopirano ✓' : 'Kopiraj JSON za LLM'}
+              {copied === 'payload' ? 'Copied ✓' : 'Copy LLM payload'}
             </button>
             <button
               type="button"
               onClick={() =>
                 downloadJson(`${run.run_id}-payload.json`, run.payload)
               }
-              className="rounded-lg bg-slate-100 px-3 py-2 text-sm dark:bg-slate-800"
+              className="rounded-lg border border-line-strong bg-paper px-3 py-2 text-sm font-semibold"
             >
-              Preuzmi payload
+              Download payload
             </button>
             <button
               type="button"
               onClick={() =>
-                downloadJson(`${run.run_id}-ceo-odgovor.json`, run)
+                downloadJson(`${run.run_id}-full-response.json`, run)
               }
-              className="rounded-lg bg-slate-100 px-3 py-2 text-sm dark:bg-slate-800"
+              className="rounded-lg border border-line-strong bg-paper px-3 py-2 text-sm font-semibold"
             >
-              Preuzmi ceo odgovor
+              Download full response
             </button>
-            <span className="text-xs text-slate-500 dark:text-slate-400">
-              payload.offers = {run.payload.offers.length} ponuda za LLM korak
+            <span className="text-xs text-ink-50">
+              payload.offers = {run.payload.offers.length} listings for the LLM
+              step
             </span>
           </section>
 
-          <Collapsible title="Ceo JSON odgovor">
+          <Collapsible title="Full JSON response">
             <pre className={`${card} max-h-96 overflow-auto p-3 text-xs`}>
               {JSON.stringify(run, null, 2)}
             </pre>
@@ -819,26 +805,23 @@ export default function ScraperPage() {
       )}
 
       <section className={`${card} p-4`}>
-        <Collapsible title={`Prethodni runovi (${runs.data?.length ?? 0})`}>
+        <Collapsible title={`Earlier runs (${runs.data?.length ?? 0})`}>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[40rem] text-left text-xs">
-              <thead className="text-slate-500 dark:text-slate-400">
+              <thead className="text-ink-50">
                 <tr>
-                  <th className="py-1 pr-3">vreme</th>
-                  <th className="py-1 pr-3">upit</th>
-                  <th className="py-1 pr-3">opseg</th>
-                  <th className="py-1 pr-3">kandidati</th>
-                  <th className="py-1 pr-3">skrejpovano</th>
-                  <th className="py-1 pr-3">slike</th>
+                  <th className="py-1 pr-3">time</th>
+                  <th className="py-1 pr-3">query</th>
+                  <th className="py-1 pr-3">scope</th>
+                  <th className="py-1 pr-3">candidates</th>
+                  <th className="py-1 pr-3">scraped</th>
+                  <th className="py-1 pr-3">images</th>
                   <th className="py-1 pr-3" />
                 </tr>
               </thead>
               <tbody>
                 {(runs.data ?? []).map((summary) => (
-                  <tr
-                    key={summary.run_id}
-                    className="border-t border-slate-100 dark:border-slate-800"
-                  >
+                  <tr key={summary.run_id} className="border-t border-line">
                     <td className="py-1 pr-3 whitespace-nowrap">
                       {summary.started_at}
                     </td>
@@ -853,9 +836,9 @@ export default function ScraperPage() {
                       <button
                         type="button"
                         onClick={() => openRun.mutate(summary.run_id)}
-                        className="rounded-md bg-slate-100 px-2 py-1 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700"
+                        className="rounded-md border border-line-strong bg-paper px-2 py-1 hover:bg-shell"
                       >
-                        otvori
+                        open
                       </button>
                     </td>
                   </tr>

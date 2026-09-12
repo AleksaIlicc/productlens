@@ -25,11 +25,11 @@ router = APIRouter(prefix="/api/scraper", tags=["scraper"])
 
 @router.get("/health")
 async def health(
-    ping: bool = Query(default=False, description="Pozovi provajdere (troši kredite)"),
+    ping: bool = Query(default=False, description="Call the providers (spends credits)"),
 ) -> ScraperHealth:
     settings = get_scraper_settings()
-    firecrawl_ping = "ključ postavljen" if settings.firecrawl_api_key else "nema ključa"
-    exa_ping = "ključ postavljen" if settings.exa_api_key else "nema ključa"
+    firecrawl_ping = "key set" if settings.firecrawl_api_key else "no key"
+    exa_ping = "key set" if settings.exa_api_key else "no key"
 
     if ping:
         fc_task = firecrawl.search_web("test", limit=1, use_cache=True)
@@ -37,8 +37,8 @@ async def health(
         (_fc_hits, fc_call), (_exa_hits, exa_call) = await asyncio.gather(
             fc_task, exa_task
         )
-        firecrawl_ping = "ok" if fc_call.ok else f"greška: {fc_call.error}"[:120]
-        exa_ping = "ok" if exa_call.ok else f"greška: {exa_call.error}"[:120]
+        firecrawl_ping = "ok" if fc_call.ok else f"error: {fc_call.error}"[:120]
+        exa_ping = "ok" if exa_call.ok else f"error: {exa_call.error}"[:120]
 
     return ScraperHealth(
         firecrawl_key=bool(settings.firecrawl_api_key),
@@ -54,9 +54,9 @@ async def health(
 @router.post("/discover")
 async def discover(request: DiscoverRequest) -> DiscoverResponse:
     if not request.query.strip():
-        raise HTTPException(400, "Unesi naziv proizvoda")
+        raise HTTPException(400, "Enter a product name")
     if not request.providers:
-        raise HTTPException(400, "Izaberi najmanje jedan provajder")
+        raise HTTPException(400, "Pick at least one provider")
     return await pipeline.discover(request)
 
 
@@ -64,7 +64,7 @@ async def discover(request: DiscoverRequest) -> DiscoverResponse:
 async def scrape(request: ScrapeOneRequest) -> ScrapedPage:
     url = request.url.strip()
     if not url.startswith(("http://", "https://")):
-        raise HTTPException(400, "URL mora počinjati sa http:// ili https://")
+        raise HTTPException(400, "The URL must start with http:// or https://")
     return await pipeline.scrape_one(request.model_copy(update={"url": url}))
 
 
@@ -77,7 +77,7 @@ def runs(limit: int = Query(default=50, ge=1, le=200)) -> list[RunSummary]:
 def run(run_id: str) -> DiscoverResponse:
     data = cache.load_run(run_id)
     if data is None:
-        raise HTTPException(404, f"Nepoznat run: {run_id}")
+        raise HTTPException(404, f"Unknown run: {run_id}")
     return DiscoverResponse.model_validate(data)
 
 
@@ -87,7 +87,7 @@ async def image(url: str = Query(..., min_length=8, max_length=2048)) -> Respons
     target = unquote(url).strip()
     problem = await public_url_problem(target)
     if problem:
-        raise HTTPException(400, f"Slika nije dozvoljena: {problem}")
+        raise HTTPException(400, f"Image not allowed: {problem}")
 
     settings = get_scraper_settings()
     status, body, content_type, error = await get_bytes(
@@ -102,12 +102,12 @@ async def image(url: str = Query(..., min_length=8, max_length=2048)) -> Respons
         validate=public_url_problem,
     )
     if error:
-        raise HTTPException(502, f"Slika nije preuzeta: {error}")
+        raise HTTPException(502, f"Image could not be fetched: {error}")
     if status is None or status >= 400 or not body:
-        raise HTTPException(502, f"Slika nije preuzeta (HTTP {status})")
+        raise HTTPException(502, f"Image could not be fetched (HTTP {status})")
     if not content_type.startswith("image/"):
         raise HTTPException(
-            415, f"Sadržaj nije slika ({content_type or 'nepoznat tip'})"
+            415, f"Response is not an image ({content_type or 'unknown type'})"
         )
 
     return Response(

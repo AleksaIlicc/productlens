@@ -6,8 +6,7 @@ import {
   type Region,
 } from './api';
 
-export const card =
-  'rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900';
+export const card = 'rounded-lg border border-line bg-paper';
 
 export function Badge({
   children,
@@ -19,19 +18,17 @@ export function Badge({
   title?: string;
 }) {
   const tones = {
-    slate: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
-    green:
-      'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300',
-    amber: 'bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-300',
-    rose: 'bg-rose-100 text-rose-900 dark:bg-rose-950 dark:text-rose-300',
-    blue: 'bg-sky-100 text-sky-900 dark:bg-sky-950 dark:text-sky-300',
-    violet:
-      'bg-violet-100 text-violet-900 dark:bg-violet-950 dark:text-violet-300',
+    slate: 'bg-shell text-ink-70 border-line-strong',
+    green: 'bg-ok-bg text-ok border-ok-line',
+    amber: 'bg-warn-bg text-warn border-warn-line',
+    rose: 'bg-bad-bg text-bad border-bad-line',
+    blue: 'bg-rose-pale text-wine border-bad-line',
+    violet: 'bg-gap-bg text-gap border-gap-line',
   };
   return (
     <span
       title={title}
-      className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-xs font-medium whitespace-nowrap ${tones[tone]}`}
+      className={`inline-flex items-center rounded border px-1.5 py-0.5 text-[11px] font-semibold whitespace-nowrap ${tones[tone]}`}
     >
       {children}
     </span>
@@ -39,9 +36,9 @@ export function Badge({
 }
 
 const REGION_LABEL: Record<Region, string> = {
-  rs: 'Srbija',
-  regional: 'region',
-  world: 'svet',
+  rs: 'Serbia',
+  regional: 'regional',
+  world: 'international',
 };
 
 export function RegionBadge({ region }: { region: Region }) {
@@ -60,9 +57,9 @@ const STATUS_BADGE: Record<
   PageStatus,
   { tone: 'green' | 'amber' | 'rose'; label: string }
 > = {
-  ok: { tone: 'green', label: 'skrejpovano' },
-  blocked: { tone: 'amber', label: 'blokirano' },
-  error: { tone: 'rose', label: 'greška' },
+  ok: { tone: 'green', label: 'scraped' },
+  blocked: { tone: 'amber', label: 'blocked' },
+  error: { tone: 'rose', label: 'error' },
 };
 
 export function StatusBadge({ status }: { status: PageStatus }) {
@@ -81,7 +78,7 @@ export function Collapsible({
 }) {
   return (
     <details open={defaultOpen} className="group">
-      <summary className="cursor-pointer text-sm font-medium text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100">
+      <summary className="cursor-pointer text-sm font-semibold text-ink-70 hover:text-ink">
         {title}
       </summary>
       <div className="mt-2">{children}</div>
@@ -98,11 +95,11 @@ function Thumb({ image }: { image: ImageRef }) {
       target="_blank"
       rel="noreferrer"
       title={`${image.role} · ${image.url}`}
-      className="relative block aspect-square overflow-hidden rounded-lg border border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-950"
+      className="relative block aspect-square overflow-hidden rounded border border-line bg-shell"
     >
       {failed ? (
-        <span className="flex h-full items-center justify-center p-1 text-center text-[10px] text-slate-400">
-          slika se ne učitava
+        <span className="flex h-full items-center justify-center p-1 text-center text-[10px] text-ink-50">
+          image failed to load
         </span>
       ) : (
         <img
@@ -117,7 +114,7 @@ function Thumb({ image }: { image: ImageRef }) {
           }}
         />
       )}
-      <span className="absolute left-1 top-1 rounded bg-black/60 px-1 text-[10px] text-white">
+      <span className="absolute top-1 left-1 rounded bg-ink/70 px-1 text-[10px] text-cream">
         {image.role}
       </span>
     </a>
@@ -126,11 +123,7 @@ function Thumb({ image }: { image: ImageRef }) {
 
 export function ImageGrid({ images }: { images: ImageRef[] }) {
   if (!images.length) {
-    return (
-      <p className="text-sm text-amber-700 dark:text-amber-400">
-        Nema pronađenih slika na ovoj strani.
-      </p>
-    );
+    return <p className="text-sm text-warn">No images found on this page.</p>;
   }
   return (
     <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6">
@@ -144,14 +137,12 @@ export function ImageGrid({ images }: { images: ImageRef[] }) {
 export function Field({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div className="min-w-0">
-      <dt className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
-        {label}
-      </dt>
+      <dt className="eyebrow text-ink-50">{label}</dt>
       <dd
-        className="truncate text-sm text-slate-900 dark:text-slate-100"
+        className="truncate text-sm text-ink"
         title={typeof value === 'string' ? value : undefined}
       >
-        {value || <span className="text-slate-400">—</span>}
+        {value || <span className="text-ink-50">—</span>}
       </dd>
     </div>
   );
@@ -160,7 +151,7 @@ export function Field({ label, value }: { label: string; value: ReactNode }) {
 export function copyToClipboard(text: string): Promise<void> {
   if (navigator.clipboard?.writeText)
     return navigator.clipboard.writeText(text);
-  return Promise.reject(new Error('Clipboard nije dostupan'));
+  return Promise.reject(new Error('Clipboard is not available'));
 }
 
 export function downloadJson(filename: string, data: unknown) {

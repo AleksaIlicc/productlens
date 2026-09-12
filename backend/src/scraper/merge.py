@@ -294,34 +294,34 @@ def _score(
 
     if len(candidate.providers) > 1:
         score += 2.0
-        reasons.append("oba provajdera +2.0")
+        reasons.append("both providers +2.0")
     best_kind = max(
         (SOURCE_KIND_WEIGHT.get(k, 0.0) for k in candidate.source_kinds), default=0.0
     )
     if best_kind:
         score += best_kind
-        reasons.append(f"izvor {'/'.join(candidate.source_kinds)} +{best_kind:.1f}")
+        reasons.append(f"source {'/'.join(candidate.source_kinds)} +{best_kind:.1f}")
     if candidate.best_position:
         bonus = max(0.0, 1.2 - 0.08 * (candidate.best_position - 1))
         if bonus:
             score += bonus
-            reasons.append(f"pozicija {candidate.best_position} +{bonus:.2f}")
+            reasons.append(f"rank {candidate.best_position} +{bonus:.2f}")
 
     type_bonus = PAGE_TYPE_WEIGHT.get(candidate.page_type, 0.0)
     if type_bonus:
         score += type_bonus
-        reasons.append(f"tip strane {candidate.page_type} {type_bonus:+.1f}")
+        reasons.append(f"page type {candidate.page_type} {type_bonus:+.1f}")
 
     domain = candidate.domain
     if _endswith_any(domain, SR_SHOP_DOMAINS):
         score += 1.0
-        reasons.append("poznata .rs prodavnica +1.0")
+        reasons.append("known .rs shop +1.0")
     elif _endswith_any(domain, WORLD_SHOP_DOMAINS):
         score += 1.0
-        reasons.append("poznata svetska prodavnica +1.0")
+        reasons.append("known international shop +1.0")
     elif _endswith_any(domain, REGIONAL_SHOP_DOMAINS):
         score += 0.6
-        reasons.append("regionalna prodavnica +0.6")
+        reasons.append("regional shop +0.6")
 
     overlap = len(query_tokens & tokens_of(f"{candidate.title} {candidate.url}"))
     if query_tokens:
@@ -333,16 +333,16 @@ def _score(
             )
         else:
             score -= 2.0
-            reasons.append("nema poklapanja sa upitom -2.0")
+            reasons.append("no overlap with the query -2.0")
 
     if _endswith_any(domain, HARD_TO_SCRAPE_DOMAINS):
         score -= 0.8
-        reasons.append("domen se teško skrejpuje -0.8")
+        reasons.append("domain is hard to scrape -0.8")
 
     # Deliberately small: a preference, not a filter, so world results stay visible.
     if prefer and candidate.tld in prefer:
         score += 0.35
-        reasons.append(f".{candidate.tld} preferencija +0.35")
+        reasons.append(f".{candidate.tld} preferred +0.35")
 
     return round(score, 3), reasons
 

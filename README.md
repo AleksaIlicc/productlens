@@ -11,30 +11,38 @@ Nema hardkodiranih demo podataka: ponude dolaze isključivo uživo, preko
 ugrađenog scraper-a (pretraga interneta + skrejpovanje, vidi
 [docs/scraping.md](docs/scraping.md)).
 
+**Aplikacija je na engleskom** — i interfejs i sve što model vrati
+(objašnjenja, verdikt, beleške sa slika).
+
 ## Workflow
 
-1. **Pretraga** — na glavnoj strani se unese ime proizvoda; backend
-   (`/api/scraper/discover`) nađe najbolje strane (domaće i svetske),
-   skrejpuje ih i vrati listu ponuda (naslov, sirov tekst stranice,
-   URL-ovi fotografija).
-2. **Izbor** — korisnik iz padajućih listi bira bilo koje dve ponude za
-   poređenje.
+Korisnik unese jedno ime proizvoda i gleda kako run teče; ostalo ide samo.
+
+1. **Pretraga i skrejpovanje** — backend nađe najbolje strane (domaće i
+   svetske), skrejpuje ih i izvuče tekst, specifikaciju i galeriju.
+2. **Izbor para** — automatski se uzima najbolja ponuda i najbolja ponuda iz
+   druge prodavnice, po mogućstvu iz drugog regiona (tu tekst najčešće
+   odluta). U izveštaju može da se izabere bilo koji drugi par.
 3. **Podaci sa slika** — fotografije se preuzimaju sa udaljenih URL-ova; ako
    ih ima 3 ili više, jeftiniji/brži model (`xai_filter_model`) prvo odbaci
    one koje ne prikazuju baš taj proizvod (stranica zna da povuče i slike
    povezanih proizvoda ili druge nijanse). Tek onda glavni (reasoning) model
    pročita preostale fotografije i vrati strukturirane podatke (tekst sa
    ambalaže, nijansa, zapremina, sastojci, upozorenja, tvrdnje). Rezultat se
-   kešira u `backend/data/image_facts.cache.json`; odgovor takođe vraća
-   proizvod sa slikama suženim na ono što je stvarno analizirano.
+   kešira u `backend/data/image_facts.cache.json`.
 4. **Poređenje** — oba skupa podataka (sajt + slike) idu u jedan poziv koji
    proverava tačno 6 unapred definisanih dimenzija (`product_identity`,
    `shade`, `volume`, `ingredients`, `warnings`, `images_vs_text` —
    vidi `ComparisonField` u `backend/src/schemas.py`) sa statusom (`match` /
-   `minor` / `mismatch` / `missing`), ozbiljnošću i objašnjenjem na srpskom.
-   Taj fiksni skup polja je namerno zatvoren (ne slobodan tekst) da model ne
-   bi flagovao nebitne stvari (cenu, šifru, kategoriju) niti izmišljao nova
-   polja.
+   `minor` / `mismatch` / `missing`), ozbiljnošću i objašnjenjem. Taj fiksni
+   skup polja je namerno zatvoren (ne slobodan tekst) da model ne bi flagovao
+   nebitne stvari (cenu, šifru, kategoriju) niti izmišljao nova polja.
+
+Ceo run traje ~2-4 minuta, pa ne ide kao jedan dug zahtev nego kao posao:
+`POST /api/analyze` vrati `job_id`, a frontend povlači `GET /api/analyze/{id}`
+i prikazuje šta se stvarno dešava (koji su sajtovi nađeni, koja strana je
+upravo pročitana, koje se fotografije trenutno gledaju). Poslovi žive u memoriji
+procesa — `uvicorn --reload` ih obriše pri svakoj izmeni backend koda.
 
 ## Pokretanje
 
@@ -54,22 +62,32 @@ npm run dev
 
 | Ruta | Opis |
 | --- | --- |
-| `POST /api/compare` | `{"a": Product, "b": Product}` → podaci sa slika + izveštaj o razlikama |
+| `POST /api/analyze` | `{"query": "..."}` → `{job_id}`; pokreće ceo run |
+| `POST /api/analyze/compare` | `{"a": Product, "b": Product}` → `{job_id}`; samo ponovno poređenje izabranog para |
+| `GET /api/analyze/{job_id}?cursor=N` | događaji od `cursor` nadalje + rezultat kad je gotovo |
+| `POST /api/compare` | isti posao kao gore, ali kao jedan blokirajući zahtev (bez progresa) |
 | `POST /api/scraper/discover` | pretraga + skrejpovanje po imenu proizvoda (vidi [docs/scraping.md](docs/scraping.md)) |
 
-`Product` = `{id, source, url, title, raw_text, images}`; `frontend/src/search.ts`
-gradi ovaj oblik od jedne ponude koju vrati `/api/scraper/discover`.
+`Product` = `{id, source, url, title, raw_text, images}`; gradi ga
+`_to_product` u `backend/src/analyze.py` od jedne ponude koju vrati scraper.
 
-Poređenje traje ~2-4 minuta (grok-4.6 je reasoning model, plus preuzimanje
-udaljenih slika); čitanje slika po ponudi se kešira.
+`/scraper` u frontendu je i dalje napredni prikaz celog scraper run-a
+(kandidati, skorovi, pozivi provajdera) — koristan za debug, nije deo demo
+toka.
 
-## Struktura backend-a
+## Struktura
 
 ```
 backend/
   src/
     config.py, main.py, llm.py, products.py, schemas.py   # aplikacioni kod
+    analyze.py, jobs.py                                    # run kao posao + progres
     scraper/                                               # pretraga + skrejpovanje (izolovano, vidi docs/scraping.md)
   tests/        # manuelna provera konekcije ka xAI API-ju
   data/         # keš pročitanih slika i scraper runova
+
+frontend/src/
+  App.tsx, useRun.ts, api.ts, ui.tsx   # ljuska, poll petlja, tokeni dizajna
+  views/                               # SearchView / RunView / ReportView
+  scraper/                             # napredni scraper prikaz
 ```

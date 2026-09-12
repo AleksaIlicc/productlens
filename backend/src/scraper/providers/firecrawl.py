@@ -4,6 +4,7 @@
 
 import asyncio
 import re
+from collections.abc import Callable
 
 from scraper import cache
 from scraper.http import post_json
@@ -416,15 +417,20 @@ async def scrape_many(
     urls: list[str],
     *,
     concurrency: int | None = None,
+    on_page: Callable[[ScrapedPage], None] | None = None,
     **kwargs,
 ) -> tuple[list[tuple[ScrapedPage, str]], list[ProviderCall]]:
-    # Bounded parallelism, input order preserved.
+    # Bounded parallelism, input order preserved. `on_page` fires the moment a
+    # page lands, so a caller can report progress while the rest are in flight.
     settings = get_scraper_settings()
     semaphore = asyncio.Semaphore(max(1, concurrency or settings.scrape_concurrency))
 
     async def one(url: str) -> tuple[ScrapedPage, ProviderCall, str]:
         async with semaphore:
-            return await scrape(url, **kwargs)
+            result = await scrape(url, **kwargs)
+            if on_page is not None:
+                on_page(result[0])
+            return result
 
     results = await asyncio.gather(*(one(u) for u in urls), return_exceptions=True)
     pages: list[tuple[ScrapedPage, str]] = []

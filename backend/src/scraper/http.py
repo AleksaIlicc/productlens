@@ -154,19 +154,19 @@ async def public_url_problem(url: str) -> str:
         return "nedostaje host"
     port = parts.port or (443 if parts.scheme == "https" else 80)
     if port not in ALLOWED_PUBLIC_PORTS:
-        return f"port {port} nije dozvoljen"
+        return f"port {port} is not allowed"
     try:
         infos = await asyncio.get_running_loop().getaddrinfo(
             host, port, proto=socket.IPPROTO_TCP
         )
     except OSError:
-        return "host se ne može razrešiti"
+        return "host could not be resolved"
     for info in infos:
         address = info[4][0]
         try:
             ip = ipaddress.ip_address(address.split("%")[0])
         except ValueError:
-            return "neispravna IP adresa"
+            return "invalid IP address"
         if (
             ip.is_private
             or ip.is_loopback

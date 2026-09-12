@@ -1,12 +1,41 @@
 @import "tailwindcss";
 
+/* Brand palette: deep burgundy on warm paper, one rose accent. */
+@theme {
+  --color-ink: #2b0a14;
+  --color-ink-70: #6d4a55;
+  --color-ink-50: #8d717a;
+  --color-wine: #7d1f3d;
+  --color-wine-dark: #5d1029;
+  --color-rose: #b3395e;
+  --color-rose-pale: #f6e7ec;
+  --color-cream: #faf7f3;
+  --color-shell: #f3ece6;
+  --color-paper: #ffffff;
+  --color-line: #e8ddd5;
+  --color-line-strong: #d6c6bc;
+
+  --color-ok: #16624a;
+  --color-ok-bg: #e7f1ec;
+  --color-ok-line: #c2ddd2;
+  --color-warn: #8a5300;
+  --color-warn-bg: #fbf1dc;
+  --color-warn-line: #ecd9ad;
+  --color-bad: #a4123a;
+  --color-bad-bg: #fbe7ec;
+  --color-bad-line: #f0c5cf;
+  --color-gap: #7a4a1b;
+  --color-gap-bg: #f8eee2;
+  --color-gap-line: #e7d4bd;
+
+  --font-sans:
+    "Plus Jakarta Sans", ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+  --font-mono:
+    ui-monospace, "SFMono-Regular", "Cascadia Mono", "Consolas", monospace;
+}
+
 :root {
-  color-scheme: light dark;
-  font:
-    16px / 145% system-ui,
-    "Segoe UI",
-    Roboto,
-    sans-serif;
+  color-scheme: light;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -15,6 +44,113 @@
 
 body {
   margin: 0;
-  background: light-dark(#f8fafc, #020617);
-  color: light-dark(#0f172a, #f1f5f9);
+  background: var(--color-cream);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+}
+
+::selection {
+  background: var(--color-rose-pale);
+}
+
+/* Small-caps section label used throughout the app. */
+.eyebrow {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* A run is slow; these carry the sense that something is happening. */
+@keyframes plens-rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes plens-sweep {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes plens-halo {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgb(179 57 94 / 0.35);
+  }
+  50% {
+    box-shadow: 0 0 0 5px rgb(179 57 94 / 0);
+  }
+}
+
+@keyframes plens-scan {
+  0% {
+    top: -20%;
+  }
+  100% {
+    top: 120%;
+  }
+}
+
+.rise {
+  animation: plens-rise 0.28s ease-out both;
+}
+
+.halo {
+  animation: plens-halo 1.8s ease-out infinite;
+}
+
+/* Indeterminate bar for a stage whose end we cannot predict. */
+.sweep::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--color-rose),
+    transparent
+  );
+  animation: plens-sweep 1.4s ease-in-out infinite;
+}
+
+/* Scanning line over a photo the vision model is reading. */
+.scan::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 34%;
+  background: linear-gradient(
+    180deg,
+    transparent,
+    rgb(179 57 94 / 0.22),
+    transparent
+  );
+  animation: plens-scan 2.1s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rise,
+  .halo,
+  .sweep::after,
+  .scan::after {
+    animation: none;
+  }
+  .scan::after {
+    display: none;
+  }
 }

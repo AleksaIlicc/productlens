@@ -4,6 +4,7 @@ import io
 import json
 from functools import lru_cache
 from pathlib import Path
+from typing import Any
 
 from openai import AsyncOpenAI
 from PIL import Image, UnidentifiedImageError
@@ -31,13 +32,13 @@ brand knowledge.
 
 For each image: its filename, its role (e.g. "packaging front", "packaging
 back / ingredients label", "marketing banner", "shade swatch"), visible_text
-(every readable string, verbatim), and a short note in Serbian.
+(every readable string, verbatim), and a short note in English.
 
 Then combine everything into one set of facts for the listing: product_name,
 shade, volume, ingredients (the INCI list, if visible), warnings (any
 safety/allergy claim), and claims (other marketing claims, e.g. "16h",
 "SPF 35"). Use an empty string or empty list for anything not visible. Write
-in Serbian, except for text copied verbatim from the packaging."""
+in English, except for text copied verbatim from the packaging."""
 
 COMPARE_PROMPT = """You audit whether a retailer's product listing matches the
 brand's official content — a mystery shopper checking for a mislabeled shade,
@@ -59,13 +60,13 @@ For each dimension:
 - severity: "high" if it could mislead a buyer or is a compliance risk (wrong
   shade, wrong volume, missing ingredients/warnings), "medium" for a real gap,
   "low" for a wording nuance, "info" only when you must report a match anyway.
-- explanation: what differs and why it matters, in Serbian.
+- explanation: what differs and why it matters, in English.
 
 If you're not sure something actually differs, mark it "match" rather than
 guessing — don't invent findings.
 
 same_product: whether this is physically the same item. verdict: a 2-3
-sentence summary, in Serbian."""
+sentence summary, in English."""
 
 IMAGE_FILTER_PROMPT = """A shop page was scraped for one product, but its
 photo gallery can include shots of OTHER products — a related-products
@@ -82,6 +83,14 @@ photos you're confident are unrelated."""
 
 class _RelevantImages(BaseModel):
     keep: list[int]
+
+
+def _silent(stage: str, message: str, **_: Any) -> None:
+    return None
+
+
+def _plural(count: int, noun: str, suffix: str = "s") -> str:
+    return f"{count} {noun}" if count == 1 else f"{count} {noun}{suffix}"
 
 
 @lru_cache
@@ -117,10 +126,19 @@ async def _fetch_all(urls: list[str]) -> dict[str, dict]:
     return {url: part for url, part in zip(urls, parts) if part is not None}
 
 
-async def _relevant_images(product: Product, parts: dict[str, dict]) -> list[str]:
+async def _relevant_images(
+    product: Product, parts: dict[str, dict], progress=_silent
+) -> list[str]:
     urls = list(parts)
     if len(urls) < MIN_IMAGES_TO_FILTER:
         return urls
+
+    progress(
+        "vision",
+        f"Screening {_plural(len(urls), 'photo')} from {product.source}",
+        detail="shop galleries mix in other products and shades",
+        source=product.source,
+    )
 
     content: list[dict] = [{"type": "text", "text": f"Product: {product.title}"}]
     for index, url in enumerate(urls):
@@ -140,6 +158,14 @@ async def _relevant_images(product: Product, parts: dict[str, dict]) -> list[str
         return urls  # filter call failed to commit to anything — fail open
 
     kept = [urls[i] for i in result.keep if 0 <= i < len(urls)]
+    if kept and len(kept) < len(urls):
+        progress(
+            "vision",
+            f"{product.source}: dropped "
+            f"{_plural(len(urls) - len(kept), 'unrelated photo')}",
+            detail=f"{_plural(len(kept), 'photo')} left showing this product",
+            source=product.source,
+        )
     return kept or urls
 
 
@@ -182,20 +208,51 @@ def _restore_urls(facts: ImageFacts, kept: list[str]) -> None:
         finding.image = by_name.get(name, finding.image)
 
 
-async def extract_image_facts(product: Product, *, refresh: bool = False) -> ImageFacts:
+async def extract_image_facts(
+    product: Product, *, refresh: bool = False, progress=_silent
+) -> ImageFacts:
     cache = _cache()
     if not refresh and product.id in cache:
         try:
-            return ImageFacts.model_validate(cache[product.id])
+            facts = ImageFacts.model_validate(cache[product.id])
+            progress(
+                "vision",
+                f"{product.source}: reusing an earlier photo read",
+                detail=f"{_plural(len(facts.per_image), 'photo')} already analysed",
+                tone="ok",
+                source=product.source,
+            )
+            return facts
         except ValidationError:
             pass  # schema changed since this was cached — re-extract below
 
+    progress(
+        "vision",
+        f"Downloading {_plural(len(product.images), 'photo')} "
+        f"from {product.source}",
+        source=product.source,
+        images=product.images[:12],
+    )
     parts = await _fetch_all(product.images)
     if not parts:
         # every image was unreadable — nothing to compare against, not a crash
+        progress(
+            "vision",
+            f"{product.source}: no readable photos",
+            detail="every image failed to download or was too small",
+            tone="warn",
+            source=product.source,
+        )
         return _EMPTY_FACTS
 
-    kept = await _relevant_images(product, parts)
+    kept = await _relevant_images(product, parts, progress)
+    progress(
+        "vision",
+        f"Reading packaging text on {_plural(len(kept), 'photo')} "
+        f"from {product.source}",
+        detail=get_settings().xai_model,
+        source=product.source,
+    )
     content: list[dict] = []
     for url in kept:
         content.append({"type": "text", "text": f"Image: {url}"})
@@ -215,6 +272,16 @@ async def extract_image_facts(product: Product, *, refresh: bool = False) -> Ima
 
     _restore_urls(facts, kept)
     _cache_store(product.id, facts)
+    progress(
+        "vision",
+        f"{product.source}: read {_plural(len(facts.per_image), 'photo')}",
+        detail=", ".join(
+            filter(None, [facts.product_name, facts.shade, facts.volume])
+        )
+        or "nothing legible on the packaging",
+        tone="ok",
+        source=product.source,
+    )
     return facts
 
 
@@ -231,8 +298,17 @@ def _offer_payload(product: Product, facts: ImageFacts) -> dict:
 
 
 async def compare_products(
-    a: Product, b: Product, facts_a: ImageFacts, facts_b: ImageFacts
+    a: Product,
+    b: Product,
+    facts_a: ImageFacts,
+    facts_b: ImageFacts,
+    progress=_silent,
 ) -> Comparison:
+    progress(
+        "audit",
+        f"Cross-checking {a.source} against {b.source}",
+        detail="identity, shade, volume, ingredients, warnings, photos vs text",
+    )
     payload = {
         "listing_a": _offer_payload(a, facts_a),
         "listing_b": _offer_payload(b, facts_b),
@@ -248,4 +324,13 @@ async def compare_products(
     comparison = completion.choices[0].message.parsed
     if comparison is None:
         raise RuntimeError("Model did not return a structured comparison")
+
+    flagged = [f for f in comparison.fields if f.status != "match"]
+    progress(
+        "audit",
+        f"{len(flagged)} of {len(comparison.fields)} dimensions flagged",
+        detail=", ".join(f.field.replace("_", " ") for f in flagged)
+        or "both listings agree on every dimension",
+        tone="warn" if flagged else "ok",
+    )
     return comparison
