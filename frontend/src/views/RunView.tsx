@@ -164,13 +164,11 @@ export default function RunView({
   title,
   eyebrow,
   events,
-  elapsedMs,
   onCancel,
 }: {
   title: string;
   eyebrow: string;
   events: JobEvent[];
-  elapsedMs: number;
   onCancel: () => void;
 }) {
   const { active, counters, sources, photos } = useMemo(
@@ -197,14 +195,9 @@ export default function RunView({
             {title}
           </h1>
         </div>
-        <div className="flex items-center gap-4">
-          <span className="tnum text-2xl font-bold text-ink">
-            {clock(elapsedMs)}
-          </span>
-          <button type="button" onClick={onCancel} className={ghostButton}>
-            Stop
-          </button>
-        </div>
+        <button type="button" onClick={onCancel} className={ghostButton}>
+          Stop
+        </button>
       </div>
 
       <div className="relative mt-5 h-[3px] overflow-hidden rounded-full bg-line sweep" />
@@ -216,9 +209,14 @@ export default function RunView({
 
         <div className="min-w-0">
           {counters.length > 0 && (
-            <dl className="mb-6 grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-line bg-line sm:grid-cols-4">
+            <dl className="mb-6 flex flex-wrap gap-px overflow-hidden rounded-lg border border-line bg-line">
               {counters.map((counter) => (
-                <div key={counter.label} className="bg-paper px-4 py-3">
+                <div
+                  key={counter.label}
+                  // Flex, not a fixed grid: the audit half reports one counter
+                  // and a 4-column grid left three empty cells showing through.
+                  className="min-w-[9rem] flex-1 bg-paper px-4 py-3"
+                >
                   <dt className="eyebrow text-ink-50">{counter.label}</dt>
                   <dd className="tnum mt-1 text-xl font-extrabold text-ink">
                     {counter.value}

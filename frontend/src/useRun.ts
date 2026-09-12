@@ -29,7 +29,6 @@ export type Run = {
   phase: RunPhase;
   query: string;
   events: JobEvent[];
-  elapsedMs: number;
   /** Everything the search turned up, the pool the picker works from. */
   products: Product[];
   suggested: string[];
@@ -47,7 +46,6 @@ export function useRun(): Run {
   const [phase, setPhase] = useState<RunPhase>('idle');
   const [query, setQuery] = useState('');
   const [events, setEvents] = useState<JobEvent[]>([]);
-  const [elapsedMs, setElapsed] = useState(0);
   const [products, setProducts] = useState<Product[]>([]);
   const [suggested, setSuggested] = useState<string[]>([]);
   const [stats, setStats] = useState<RunStats | null>(null);
@@ -73,7 +71,6 @@ export function useRun(): Run {
         const state = await fetchJob(job.id, cursor);
         if (stopped) return;
         cursor = state.cursor;
-        setElapsed(state.elapsed_ms);
         if (state.events.length) {
           setEvents((prev) => {
             const seen = new Set(prev.map((event) => event.seq));
@@ -124,7 +121,6 @@ export function useRun(): Run {
     ) => {
       setJob(null);
       setEvents([]);
-      setElapsed(0);
       setError('');
       setPhase(phaseName);
       try {
@@ -188,7 +184,6 @@ export function useRun(): Run {
     phase,
     query,
     events,
-    elapsedMs,
     products,
     suggested,
     stats,

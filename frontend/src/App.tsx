@@ -17,7 +17,6 @@ function App() {
           title={run.query}
           eyebrow={run.phase === 'searching' ? 'Searching' : 'Auditing'}
           events={run.events}
-          elapsedMs={run.elapsedMs}
           onCancel={run.phase === 'comparing' ? run.backToSelection : run.reset}
         />
       )}
