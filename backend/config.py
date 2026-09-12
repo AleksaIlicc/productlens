@@ -9,6 +9,10 @@ class Settings(BaseSettings):
     app_name: str = "productlens"
     debug: bool = False
 
+    xai_api_key: str = ""
+    xai_base_url: str = "https://api.x.ai/v1"
+    xai_model: str = "grok-4.6"
+
 
 @lru_cache
 def get_settings() -> Settings:

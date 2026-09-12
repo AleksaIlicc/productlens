@@ -3,7 +3,7 @@
 :root {
   color-scheme: light dark;
   font:
-    18px / 145% system-ui,
+    16px / 145% system-ui,
     "Segoe UI",
     Roboto,
     sans-serif;
@@ -11,4 +11,10 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  background: light-dark(#f8fafc, #020617);
+  color: light-dark(#0f172a, #f1f5f9);
 }
