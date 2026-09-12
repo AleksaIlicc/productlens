@@ -19,9 +19,16 @@ from scraper.http import fetch_image_bytes
 # 1-2 images doesn't carry an unrelated-product carousel.
 MIN_IMAGES_TO_FILTER = 3
 
-# xAI's vision API hard-rejects anything smaller than this (whole batch
-# fails, not just that image) — site icons and tiny thumbnails hit this.
+# One unusable image fails the whole batch, not just that image, so both of
+# these are checked before sending: the API rejects anything smaller than
+# MIN_IMAGE_PIXELS (site icons, tiny thumbnails), and it only decodes the
+# formats below — while Pillow happily opens GIF/BMP/AVIF that it can't.
 MIN_IMAGE_PIXELS = 512
+SUPPORTED_IMAGE_TYPES = {
+    "JPEG": "image/jpeg",
+    "PNG": "image/png",
+    "WEBP": "image/webp",
+}
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 CACHE_FILE = BACKEND_DIR / "data" / "image_facts.cache.json"
@@ -69,16 +76,20 @@ same_product: whether this is physically the same item. verdict: a 2-3
 sentence summary, in English."""
 
 IMAGE_FILTER_PROMPT = """A shop page was scraped for one product, but its
-photo gallery can include shots of OTHER products — a related-products
-carousel, a banner for a different shade/variant, unrelated promo content.
+photo gallery can include shots of a completely DIFFERENT product — a
+related-products carousel, an unrelated promo — or site chrome: logos,
+icons, payment badges, QR codes.
 
 You're given the product's name, then each candidate photo, numbered.
-Return the numbers of only the photos that actually show THIS product
-(packaging, texture, swatch, or a marketing shot of it — any angle is
-fine). Drop photos that clearly show a different product or variant.
+Return the numbers of every photo that belongs to THIS product's listing.
 
-If you can't tell whether a photo shows this product, keep it — only drop
-photos you're confident are unrelated."""
+Keep a photo of the same product line even when it pictures a different
+shade, size or variant than the name says. A shop advertising the wrong
+variant is exactly what the next step has to report, so it has to see
+those photos — don't quietly remove them.
+
+Drop only photos of a genuinely different product, and site chrome. If
+you're unsure, keep it."""
 
 
 class _RelevantImages(BaseModel):
@@ -101,22 +112,28 @@ def _client() -> AsyncOpenAI:
     return AsyncOpenAI(api_key=settings.xai_api_key, base_url=settings.xai_base_url)
 
 
-def _big_enough(data: bytes) -> bool:
+def _image_type(data: bytes) -> str | None:
+    # The media type to send it as, or None if the API can't use this image.
     try:
         with Image.open(io.BytesIO(data)) as img:
-            return (img.width * img.height) >= MIN_IMAGE_PIXELS
+            if (img.width * img.height) < MIN_IMAGE_PIXELS:
+                return None
+            return SUPPORTED_IMAGE_TYPES.get(img.format or "")
     except UnidentifiedImageError:
-        return False
+        return None
 
 
 async def _image_part(url: str) -> dict | None:
     data = await fetch_image_bytes(url)
-    if data is None or not _big_enough(data):
+    if data is None:
+        return None
+    media_type = _image_type(data)
+    if media_type is None:
         return None
     b64 = base64.b64encode(data).decode()
     return {
         "type": "image_url",
-        "image_url": {"url": f"data:image/jpeg;base64,{b64}", "detail": "high"},
+        "image_url": {"url": f"data:{media_type};base64,{b64}", "detail": "high"},
     }
 
 

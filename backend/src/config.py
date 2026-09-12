@@ -12,7 +12,10 @@ class Settings(BaseSettings):
     xai_api_key: str = ""
     xai_base_url: str = "https://api.x.ai/v1"
     xai_model: str = "grok-4.6"
-    xai_filter_model: str = "grok-4.20-0309-non-reasoning"
+    # Image-relevance filter. Same snapshot as the non-reasoning variant, just
+    # allowed to think: it has to keep 8 photos straight against their index,
+    # and the non-reasoning one kept photos of obviously different products.
+    xai_filter_model: str = "grok-4.20-0309-reasoning"
 
 
 @lru_cache
