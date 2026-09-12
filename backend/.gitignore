@@ -4,5 +4,5 @@ __pycache__/
 .ruff_cache/
 .env
 data/image_facts.cache.json
-data/lab_cache/
-data/lab_runs/
+data/scraper_cache/
+data/scraper_runs/

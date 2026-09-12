@@ -27,7 +27,7 @@ import {
   StatusBadge,
 } from './parts';
 
-const STORAGE_KEY = 'productlens.lab.options.v1';
+const STORAGE_KEY = 'productlens.scraper.options.v1';
 
 const DEFAULT_OPTIONS: DiscoverRequest = {
   query: '',
@@ -434,7 +434,7 @@ function PageCard({ page }: { page: ScrapedPage }) {
   );
 }
 
-export default function ScrapeLab() {
+export default function ScraperPage() {
   const queryClient = useQueryClient();
   const [options, setOptions] = useState<DiscoverRequest>(loadOptions);
   const [run, setRun] = useState<DiscoverResponse | null>(null);
@@ -451,17 +451,17 @@ export default function ScrapeLab() {
   }, [options]);
 
   const health = useQuery({
-    queryKey: ['lab', 'health'],
+    queryKey: ['scraper', 'health'],
     queryFn: fetchHealth,
   });
-  const runs = useQuery({ queryKey: ['lab', 'runs'], queryFn: fetchRuns });
+  const runs = useQuery({ queryKey: ['scraper', 'runs'], queryFn: fetchRuns });
 
   const discovery = useMutation({
     mutationFn: discover,
     onSuccess: (data) => {
       setRun(data);
       setManualPages([]);
-      queryClient.invalidateQueries({ queryKey: ['lab', 'runs'] });
+      queryClient.invalidateQueries({ queryKey: ['scraper', 'runs'] });
     },
   });
 
@@ -513,8 +513,8 @@ export default function ScrapeLab() {
   return (
     <div className="mx-auto max-w-7xl space-y-4 p-4 text-slate-900 dark:text-slate-100">
       <header className="flex flex-wrap items-center gap-2">
-        <h1 className="text-xl font-bold">Scraping lab</h1>
-        <Badge tone="amber">privremena strana</Badge>
+        <h1 className="text-xl font-bold">Scraper</h1>
+        <Badge tone="amber">napredni prikaz</Badge>
         {health.data && (
           <>
             <Badge tone={health.data.firecrawl_key ? 'green' : 'rose'}>

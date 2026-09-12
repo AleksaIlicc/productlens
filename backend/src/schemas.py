@@ -54,8 +54,10 @@ class Comparison(BaseModel):
 
 
 class CompareRequest(BaseModel):
-    a: str
-    b: str
+    # A demo product id ("jankovic") or a full Product — e.g. one converted
+    # client-side from a live search result on the scraper.
+    a: str | Product
+    b: str | Product
 
 
 class CompareResponse(BaseModel):

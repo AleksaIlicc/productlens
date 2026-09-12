@@ -2,19 +2,19 @@
 pages) plus /contents as a cheap fallback reader for pages Firecrawl cannot get.
 """
 
-from lab import cache
-from lab.http import post_json
-from lab.models import ImageRef, ProviderCall, ScrapedPage, SearchHit
-from lab.settings import get_lab_settings
-from lab.urls import canonicalize, domain_of, region_of
+from scraper import cache
+from scraper.http import post_json
+from scraper.models import ImageRef, ProviderCall, ScrapedPage, SearchHit
+from scraper.settings import get_scraper_settings
+from scraper.urls import canonicalize, domain_of, region_of
 
 
 def _headers() -> dict[str, str]:
-    return {"x-api-key": get_lab_settings().exa_api_key}
+    return {"x-api-key": get_scraper_settings().exa_api_key}
 
 
 def _url(path: str) -> str:
-    return f"{get_lab_settings().exa_base_url.rstrip('/')}/{path.lstrip('/')}"
+    return f"{get_scraper_settings().exa_base_url.rstrip('/')}/{path.lstrip('/')}"
 
 
 def _cost_of(payload: dict | None) -> float | None:
@@ -34,7 +34,7 @@ async def _call(
     query: str,
     use_cache: bool,
 ) -> tuple[dict | None, ProviderCall]:
-    settings = get_lab_settings()
+    settings = get_scraper_settings()
     if not settings.exa_api_key:
         return None, ProviderCall(
             provider="exa",
@@ -44,8 +44,8 @@ async def _call(
             error="EXA_API_KEY nije postavljen",
         )
 
-    use_disk = use_cache and settings.lab_cache_enabled
-    cached = cache.load(kind, body, settings.lab_cache_ttl_hours) if use_disk else None
+    use_disk = use_cache and settings.cache_enabled
+    cached = cache.load(kind, body, settings.cache_ttl_hours) if use_disk else None
     if cached is not None:
         return cached, ProviderCall(
             provider="exa", endpoint=endpoint, query=query, ok=True, from_cache=True
@@ -55,8 +55,8 @@ async def _call(
         _url(endpoint),
         body,
         _headers(),
-        timeout=settings.lab_http_timeout,
-        attempts=settings.lab_retry_attempts,
+        timeout=settings.http_timeout,
+        attempts=settings.retry_attempts,
     )
     call = ProviderCall(
         provider="exa",

@@ -1,16 +1,16 @@
 """Firecrawl v2: broad search (the `site:rs` trick), image search, domain mapping
 and page scraping. Every function returns its payload plus a ProviderCall so the
-lab UI can show what was spent and what failed.
+caller can show what was spent and what failed.
 """
 
 import asyncio
 import re
 
-from lab import cache
-from lab.http import post_json
-from lab.models import ImageRef, PageFacts, ProviderCall, ScrapedPage, SearchHit
-from lab.settings import get_lab_settings
-from lab.urls import canonicalize, domain_of, region_of
+from scraper import cache
+from scraper.http import post_json
+from scraper.models import ImageRef, PageFacts, ProviderCall, ScrapedPage, SearchHit
+from scraper.settings import get_scraper_settings
+from scraper.urls import canonicalize, domain_of, region_of
 
 SCRAPE_FORMATS = ["markdown", "links", "images"]
 
@@ -39,11 +39,11 @@ ITEMPROP_WINDOW_RE = re.compile(
 
 
 def _headers() -> dict[str, str]:
-    return {"Authorization": f"Bearer {get_lab_settings().firecrawl_api_key}"}
+    return {"Authorization": f"Bearer {get_scraper_settings().firecrawl_api_key}"}
 
 
 def _url(path: str) -> str:
-    return f"{get_lab_settings().firecrawl_base_url.rstrip('/')}/{path.lstrip('/')}"
+    return f"{get_scraper_settings().firecrawl_base_url.rstrip('/')}/{path.lstrip('/')}"
 
 
 def credits_of(payload: dict | None) -> float | None:
@@ -112,7 +112,7 @@ async def _call(
     query: str,
     use_cache: bool,
 ) -> tuple[dict | None, ProviderCall]:
-    settings = get_lab_settings()
+    settings = get_scraper_settings()
     if not settings.firecrawl_api_key:
         return None, ProviderCall(
             provider="firecrawl",
@@ -123,8 +123,8 @@ async def _call(
         )
 
     cached = (
-        cache.load(kind, body, settings.lab_cache_ttl_hours)
-        if (use_cache and settings.lab_cache_enabled)
+        cache.load(kind, body, settings.cache_ttl_hours)
+        if (use_cache and settings.cache_enabled)
         else None
     )
     if cached is not None:
@@ -141,8 +141,8 @@ async def _call(
         _url(endpoint),
         body,
         _headers(),
-        timeout=settings.lab_http_timeout,
-        attempts=settings.lab_retry_attempts,
+        timeout=settings.http_timeout,
+        attempts=settings.retry_attempts,
     )
     call = ProviderCall(
         provider="firecrawl",
@@ -302,7 +302,7 @@ async def scrape(
     The digest is deliberately NOT part of ScrapedPage: it is an extraction input,
     not something the UI or the LLM handoff should carry around.
     """
-    settings = get_lab_settings()
+    settings = get_scraper_settings()
     formats = list(SCRAPE_FORMATS)
     if include_structured:
         formats.append("rawHtml")  # only source of JSON-LD; reduced to a digest below
@@ -312,7 +312,7 @@ async def scrape(
         # False on purpose: main-content stripping drops price blocks and the
         # gallery on several .rs shops.
         "onlyMainContent": False,
-        "timeout": timeout_ms or settings.lab_scrape_timeout_ms,
+        "timeout": timeout_ms or settings.scrape_timeout_ms,
     }
     if stealth:
         body["proxy"] = "stealth"
@@ -330,11 +330,9 @@ async def scrape(
         facts=PageFacts(),
     )
 
-    use_disk = use_cache and settings.lab_cache_enabled
+    use_disk = use_cache and settings.cache_enabled
     cached = (
-        cache.load("fc_scrape", body, settings.lab_cache_ttl_hours)
-        if use_disk
-        else None
+        cache.load("fc_scrape", body, settings.cache_ttl_hours) if use_disk else None
     )
     if cached is not None:
         payload: dict | None = cached
@@ -347,8 +345,8 @@ async def scrape(
             _url("scrape"),
             body,
             _headers(),
-            timeout=settings.lab_http_timeout,
-            attempts=settings.lab_retry_attempts,
+            timeout=settings.http_timeout,
+            attempts=settings.retry_attempts,
         )
         call = ProviderCall(
             provider="firecrawl",
@@ -379,7 +377,7 @@ async def scrape(
     metadata = _flatten_metadata(data.get("metadata"))
     markdown = str(data.get("markdown") or "")
     structured = str(data.get("rawHtml") or "")
-    cap = max_markdown_chars or settings.lab_max_markdown_chars
+    cap = max_markdown_chars or settings.max_markdown_chars
     http_status = metadata.get("statusCode")
 
     page.metadata = metadata
@@ -428,10 +426,8 @@ async def scrape_many(
     **kwargs,
 ) -> tuple[list[tuple[ScrapedPage, str]], list[ProviderCall]]:
     """Scrape in parallel, bounded, input order preserved."""
-    settings = get_lab_settings()
-    semaphore = asyncio.Semaphore(
-        max(1, concurrency or settings.lab_scrape_concurrency)
-    )
+    settings = get_scraper_settings()
+    semaphore = asyncio.Semaphore(max(1, concurrency or settings.scrape_concurrency))
 
     async def one(url: str) -> tuple[ScrapedPage, ProviderCall, str]:
         async with semaphore:

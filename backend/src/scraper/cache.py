@@ -1,4 +1,4 @@
-"""On-disk JSON cache for raw provider responses plus persisted lab runs, so
+"""On-disk JSON cache for raw provider responses plus persisted scraper runs, so
 re-running a query in the UI is free and past runs stay inspectable.
 """
 
@@ -10,7 +10,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from lab.settings import CACHE_DIR, RUNS_DIR
+from scraper.settings import CACHE_DIR, RUNS_DIR
 
 RUN_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 

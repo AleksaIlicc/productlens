@@ -1,14 +1,18 @@
-# Scraping lab (privremeno)
+# Scraping
 
-Ovo je **naš deo** ProductLens-a: pretraga interneta + skrejpovanje, bez ikakve LLM
-obrade. Cilj je da za uneto ime proizvoda nađemo **sve linkove do tog proizvoda —
-i domaće (.rs) i svetske** — skrejpujemo najbolje strane i spremimo čist paket
-podataka (`payload.offers`) koji LLM korak za poređenje kasnije samo pojede.
+Pretraga interneta + skrejpovanje, bez ikakve LLM obrade — za uneto ime
+proizvoda nalazi **sve linkove do tog proizvoda, i domaće (.rs) i svetske**,
+skrejpuje najbolje strane i sprema čist paket podataka (`payload.offers`) koji
+LLM korak za poređenje pojede.
 
-Sve živi u novim fajlovima (`backend/src/lab/**`, `frontend/src/lab/**`) i visi na
-`/api/lab/*` i strani `/lab`, da se ne sudara sa LLM delom. Jedine izmene u
-postojećim fajlovima su dve linije u `backend/src/main.py` i dve u
-`frontend/src/main.tsx` (uključivanje rute).
+Kod živi izolovano (`backend/src/scraper/**`, `frontend/src/scraper/**`,
+`/api/scraper/*`) da bi se lako menjao bez diranja LLM/poređenje dela; jedine
+dodirne tačke su import + `include_router` u `backend/src/main.py`, ruta u
+`frontend/src/main.tsx`, i `frontend/src/search.ts` koji ponude pretvara u
+`Product` za `/api/compare` (vidi „Spoj sa LLM delom" ispod). Glavna strana
+(`/`) zove ovo za pretragu proizvoda; strana `/scraper` je napredni/debug
+prikaz istog `/discover` poziva sa punim detaljima (kandidati, skorovi,
+pozivi provajdera).
 
 ## Pokretanje
 
@@ -19,17 +23,13 @@ cp .env.example .env    # upiši FIRECRAWL_API_KEY i EXA_API_KEY (i XAI_API_KEY 
 uv sync
 uv run uvicorn main:app --reload --app-dir src
 
-# frontend (http://localhost:5173) — lab strana je na /lab
+# frontend (http://localhost:5173) — scraper strana je na /scraper
 cd frontend
 npm install
 npm run dev
 ```
 
-> Na Windows-u sa cp1252 lokalom `backend/src/products.py` pada pri startu
-> (`products.json` se čita bez `encoding="utf-8"`). Do ispravke u tom fajlu,
-> pokreni backend sa UTF-8 modom: `PYTHONUTF8=1 uv run uvicorn main:app --app-dir src`.
-
-Otvori **http://localhost:5173/lab**, unesi npr. `Vichy Dermablend Corrector 35 Sand`
+Otvori **http://localhost:5173/scraper**, unesi npr. `Vichy Dermablend Corrector 35 Sand`
 i pokreni pretragu. Traje 15–60 s za prvi put, ponovljeni isti upit ide iz keša
 (~2 s, bez troška).
 
@@ -37,17 +37,17 @@ i pokreni pretragu. Traje 15–60 s za prvi put, ponovljeni isti upit ide iz ke�
 
 | Ruta | Opis |
 | --- | --- |
-| `GET /api/lab/health` | ima li ključeva, stanje keša, broj sačuvanih runova. `?ping=true` pozove provajdere (troši kredite) |
-| `POST /api/lab/discover` | glavna ruta: pretraga → rangiranje → skrejpovanje → podaci + slike + `payload` |
-| `POST /api/lab/scrape` | skrejpuj jedan URL (`{"url": "...", "provider": "firecrawl"}`) |
-| `GET /api/lab/runs` | lista prethodnih runova (sačuvani na disku) |
-| `GET /api/lab/runs/{run_id}` | ceo odgovor jednog runa, bez novih API poziva |
-| `GET /api/lab/image?url=...` | proxy za slike (neki sajtovi blokiraju hotlink); odbija privatne adrese i ne-slike |
+| `GET /api/scraper/health` | ima li ključeva, stanje keša, broj sačuvanih runova. `?ping=true` pozove provajdere (troši kredite) |
+| `POST /api/scraper/discover` | glavna ruta: pretraga → rangiranje → skrejpovanje → podaci + slike + `payload` |
+| `POST /api/scraper/scrape` | skrejpuj jedan URL (`{"url": "...", "provider": "firecrawl"}`) |
+| `GET /api/scraper/runs` | lista prethodnih runova (sačuvani na disku) |
+| `GET /api/scraper/runs/{run_id}` | ceo odgovor jednog runa, bez novih API poziva |
+| `GET /api/scraper/image?url=...` | proxy za slike (neki sajtovi blokiraju hotlink); odbija privatne adrese i ne-slike |
 
 ```sh
-curl -s http://127.0.0.1:8000/api/lab/health
+curl -s http://127.0.0.1:8000/api/scraper/health
 
-curl -s -X POST http://127.0.0.1:8000/api/lab/discover \
+curl -s -X POST http://127.0.0.1:8000/api/scraper/discover \
   -H "Content-Type: application/json" \
   -d '{"query":"Vichy Dermablend Corrector 35 Sand","scrape_top":6}'
 ```
@@ -132,16 +132,24 @@ To je jedina stvar koju LLM korak treba od nas:
 }
 ```
 
-Predlog spajanja: LLM deo umesto hardkodiranih ponuda iz `products.json` uzima
-`offers` (svaka je jedan sajt) — `images` su direktni URL-ovi za vision poziv,
-`markdown` je tekst strane, a `gtin`/`sku`/`variant_hints` su najjači signal da li
-je uopšte reč o istom proizvodu. Kada se spoji, ovaj router se briše.
+**Ovo je spojeno** sa LLM delom (`frontend/src/search.ts`): svaki `offer` se
+klijentski pretvori u isti `Product` oblik koji koriste hardkodirane ponude iz
+`products.json` (`description`/`specs` → `raw_text`, `images` ostaju puni
+URL-ovi) i ide na `POST /api/compare` pored postojećih 2 demo proizvoda —
+korisnik na glavnoj strani pretraži proizvod, dobijene ponude se dodaju u
+padajuće liste, i bira bilo koje dve za poređenje. Backend prepoznaje da li je
+`a`/`b` id demo proizvoda ili ceo `Product` objekat (`main._resolve`), a slike
+sa udaljenih URL-ova se za vision poziv preuzimaju preko istog SSRF-bezbednog
+fetch-a koji koristi i `/api/scraper/image` (`scraper/http.fetch_image_bytes`).
+Ovaj router ostaje — sad služi kao napredni prikaz jednog runa (kandidati,
+skorovi, pozivi provajdera), dok glavna strana zove isti `/discover` sa
+razumnim podrazumevanim opcijama i ne prikazuje te detalje.
 
 ## Keš i runovi
 
-- `backend/data/lab_cache/` — sirovi odgovori provajdera (TTL 24 h), po tipu poziva.
-- `backend/data/lab_runs/<run_id>.json` — ceo odgovor svakog runa, za `/runs`.
-- Oba su u `.gitignore`. Brisanje: `rm -rf backend/data/lab_cache backend/data/lab_runs`.
+- `backend/data/scraper_cache/` — sirovi odgovori provajdera (TTL 24 h), po tipu poziva.
+- `backend/data/scraper_runs/<run_id>.json` — ceo odgovor svakog runa, za `/runs`.
+- Oba su u `.gitignore`. Brisanje: `rm -rf backend/data/scraper_cache backend/data/scraper_runs`.
 - Keširan poziv se ne broji u trošak (`totals.cache_hits` vs `firecrawl_credits`/`exa_cost_usd`).
 
 Realni troškovi po runu (`scrape_top: 5–6`, bez keša): ~18–23 Firecrawl kredita i
@@ -157,6 +165,10 @@ Realni troškovi po runu (`scrape_top: 5–6`, bez keša): ~18–23 Firecrawl kr
   upravo tip neslaganja koje LLM korak treba da flaguje, ne krijemo ga.
 - **Marketplace-ovi (amazon, ebay) i pojedini svetski shopovi** imaju bot zaštitu;
   ostaju u listi linkova ali su blago spušteni u skoru i često padnu na skrejpu.
+- **Sephora.com odbija i preuzimanje slika**, ne samo skrejp stranice: CDN
+  (`sephora.com/productimages/...`) vraća grešku serverskom fetch-u čak i kad je
+  sama stranica uspešno pročitana (potvrđeno uživo). Vision korak tada dobije
+  prazne `ImageFacts` za tu stranu i poređenje se oslanja samo na tekst.
 - **Specifikacija** se izvlači samo kada je na strani u tabeli ili `key: value`
   formatu; mnogi .rs shopovi je nemaju strukturirano, pa `specs` ostaje prazan, a
   podaci su u `markdown`/`description`.

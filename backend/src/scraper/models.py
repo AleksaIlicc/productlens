@@ -115,7 +115,7 @@ class ProviderCall(BaseModel):
     error: str = ""
 
 
-class LabOffer(BaseModel):
+class ScrapedOffer(BaseModel):
     """One shop's offer: the handoff unit for the LLM comparison step."""
 
     url: str
@@ -133,10 +133,10 @@ class LabOffer(BaseModel):
     markdown: str = ""
 
 
-class LabPayload(BaseModel):
+class ScraperPayload(BaseModel):
     product_query: str
     generated_at: str
-    offers: list[LabOffer] = Field(default_factory=list)
+    offers: list[ScrapedOffer] = Field(default_factory=list)
 
 
 class RunTotals(BaseModel):
@@ -190,7 +190,7 @@ class DiscoverResponse(BaseModel):
     provider_calls: list[ProviderCall] = Field(default_factory=list)
     candidates: list[Candidate] = Field(default_factory=list)
     pages: list[ScrapedPage] = Field(default_factory=list)
-    payload: LabPayload
+    payload: ScraperPayload
     warnings: list[str] = Field(default_factory=list)
 
 
@@ -205,7 +205,7 @@ class RunSummary(BaseModel):
     images: int = 0
 
 
-class LabHealth(BaseModel):
+class ScraperHealth(BaseModel):
     firecrawl_key: bool
     exa_key: bool
     cache_enabled: bool

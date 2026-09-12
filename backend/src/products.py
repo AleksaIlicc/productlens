@@ -25,6 +25,7 @@ class Product(BaseModel):
 
 
 PRODUCTS: list[Product] = [
-    Product.model_validate(item) for item in json.loads(DATA_FILE.read_text())
+    Product.model_validate(item)
+    for item in json.loads(DATA_FILE.read_text(encoding="utf-8"))
 ]
 BY_ID: dict[str, Product] = {p.id: p for p in PRODUCTS}

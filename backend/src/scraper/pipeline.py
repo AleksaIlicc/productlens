@@ -1,4 +1,4 @@
-"""The lab run: build query variants -> search both worlds in parallel -> merge and
+"""The scraper run: build query variants -> search both worlds in parallel -> merge and
 rank -> scrape the best pages -> extract facts and images -> hand back a payload
 the LLM step can consume. No LLM calls here.
 """
@@ -7,24 +7,24 @@ import asyncio
 import uuid
 from datetime import datetime, timezone
 
-from lab import cache, merge
-from lab.extract import extract_facts
-from lab.images import clean_gallery, gallery_urls
-from lab.models import (
+from scraper import cache, merge
+from scraper.extract import extract_facts
+from scraper.images import clean_gallery, gallery_urls
+from scraper.models import (
     Candidate,
     DiscoverRequest,
     DiscoverResponse,
-    LabOffer,
-    LabPayload,
     ProviderCall,
     RunTotals,
+    ScrapedOffer,
     ScrapedPage,
     ScrapeOneRequest,
+    ScraperPayload,
     SearchHit,
 )
-from lab.providers import exa, firecrawl
-from lab.settings import get_lab_settings
-from lab.urls import canonicalize, domain_of
+from scraper.providers import exa, firecrawl
+from scraper.settings import get_scraper_settings
+from scraper.urls import canonicalize, domain_of
 
 MAP_DOMAINS_LIMIT = 4
 # Below this, with no images, a page almost certainly did not finish rendering.
@@ -91,9 +91,9 @@ def _flatten(results: list) -> tuple[list[SearchHit], list[ProviderCall]]:
 async def _run_searches(
     req: DiscoverRequest,
 ) -> tuple[list[SearchHit], list[ProviderCall]]:
-    settings = get_lab_settings()
+    settings = get_scraper_settings()
     plan = build_queries(req.query, scope=req.scope)
-    semaphore = asyncio.Semaphore(max(1, settings.lab_search_concurrency))
+    semaphore = asyncio.Semaphore(max(1, settings.search_concurrency))
     per_provider = max(8, min(20, req.limit_candidates))
 
     async def guarded(coro):
@@ -169,7 +169,7 @@ async def _deep_map(
     if not targets:
         return [], []
 
-    semaphore = asyncio.Semaphore(max(1, get_lab_settings().lab_search_concurrency))
+    semaphore = asyncio.Semaphore(max(1, get_scraper_settings().search_concurrency))
 
     async def one(domain: str):
         async with semaphore:
@@ -185,7 +185,7 @@ async def _deep_map(
 def _finalize_page(
     page: ScrapedPage, structured_html: str, candidate: Candidate | None
 ) -> ScrapedPage:
-    settings = get_lab_settings()
+    settings = get_scraper_settings()
     raw_images = list(page.images)
     if candidate:
         known = {img.url for img in raw_images}
@@ -203,7 +203,7 @@ def _finalize_page(
     page.images = clean_gallery(
         raw_images,
         page_url=page.final_url or page.url,
-        max_images=settings.lab_max_images,
+        max_images=settings.max_images,
         prefer_token=facts.gtin,
         prefer_tokens=(facts.sku,),
     )
@@ -282,14 +282,14 @@ async def _scrape_pages(
 
 def _build_payload(
     query: str, candidates: list[Candidate], pages: list[ScrapedPage]
-) -> LabPayload:
+) -> ScraperPayload:
     order = {c.canonical_url: index for index, c in enumerate(candidates)}
     ok_pages = sorted(
         (p for p in pages if p.status == "ok"),
         key=lambda p: order.get(p.canonical_url, 999),
     )
     offers = [
-        LabOffer(
+        ScrapedOffer(
             url=page.final_url or page.url,
             domain=page.domain,
             region=page.region,
@@ -299,14 +299,14 @@ def _build_payload(
             availability=page.facts.availability,
             sku=page.facts.sku,
             gtin=page.facts.gtin,
-            images=gallery_urls(page.images, get_lab_settings().lab_max_images),
+            images=gallery_urls(page.images, get_scraper_settings().max_images),
             specs=page.facts.specs,
             description=page.facts.description,
             markdown=page.markdown,
         )
         for page in ok_pages
     ]
-    return LabPayload(product_query=query, generated_at=_now_iso(), offers=offers)
+    return ScraperPayload(product_query=query, generated_at=_now_iso(), offers=offers)
 
 
 def _totals(
@@ -350,7 +350,7 @@ def _warnings(
     pages: list[ScrapedPage],
     totals: RunTotals,
 ) -> list[str]:
-    settings = get_lab_settings()
+    settings = get_scraper_settings()
     warnings: list[str] = []
     if not settings.firecrawl_api_key:
         warnings.append(

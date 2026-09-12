@@ -8,9 +8,9 @@ per side so one world can never crowd out the other.
 import re
 import unicodedata
 
-from lab.extract import classify_page
-from lab.models import Candidate, Region, SearchHit
-from lab.urls import domain_of, region_of, tld_of
+from scraper.extract import classify_page
+from scraper.models import Candidate, Region, SearchHit
+from scraper.urls import domain_of, region_of, tld_of
 
 # Curated, easy to extend. Verified by live search/scrape probes.
 SR_SHOP_DOMAINS = (

@@ -1,4 +1,4 @@
-// Types + fetch helpers for the temporary scraping lab (/api/lab).
+// Types + fetch helpers for the scraper (/api/scraper).
 // Deliberately separate from src/api.ts so the two halves of the app do not collide.
 
 export type Provider = 'exa' | 'firecrawl';
@@ -98,7 +98,7 @@ export type ProviderCall = {
   error: string;
 };
 
-export type LabOffer = {
+export type ScrapedOffer = {
   url: string;
   domain: string;
   region: Region;
@@ -141,7 +141,11 @@ export type DiscoverResponse = {
   provider_calls: ProviderCall[];
   candidates: Candidate[];
   pages: ScrapedPage[];
-  payload: { product_query: string; generated_at: string; offers: LabOffer[] };
+  payload: {
+    product_query: string;
+    generated_at: string;
+    offers: ScrapedOffer[];
+  };
   warnings: string[];
 };
 
@@ -171,7 +175,7 @@ export type RunSummary = {
   images: number;
 };
 
-export type LabHealth = {
+export type ScraperHealth = {
   firecrawl_key: boolean;
   exa_key: boolean;
   cache_enabled: boolean;
@@ -195,24 +199,24 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
 
 /** Product images go through the backend so hotlink protection cannot blank them. */
 export const proxiedImage = (url: string) =>
-  `/api/lab/image?url=${encodeURIComponent(url)}`;
+  `/api/scraper/image?url=${encodeURIComponent(url)}`;
 
-export const fetchHealth = () => request<LabHealth>('/api/lab/health');
+export const fetchHealth = () => request<ScraperHealth>('/api/scraper/health');
 
-export const fetchRuns = () => request<RunSummary[]>('/api/lab/runs');
+export const fetchRuns = () => request<RunSummary[]>('/api/scraper/runs');
 
 export const fetchRun = (runId: string) =>
-  request<DiscoverResponse>(`/api/lab/runs/${encodeURIComponent(runId)}`);
+  request<DiscoverResponse>(`/api/scraper/runs/${encodeURIComponent(runId)}`);
 
 export const discover = (body: DiscoverRequest) =>
-  request<DiscoverResponse>('/api/lab/discover', {
+  request<DiscoverResponse>('/api/scraper/discover', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
 
 export const scrapeOne = (url: string, useCache = true) =>
-  request<ScrapedPage>('/api/lab/scrape', {
+  request<ScrapedPage>('/api/scraper/scrape', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ url, use_cache: useCache, provider: 'firecrawl' }),

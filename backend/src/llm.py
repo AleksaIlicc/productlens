@@ -3,12 +3,13 @@ import json
 from functools import lru_cache
 from pathlib import Path
 
-from openai import OpenAI
+from openai import AsyncOpenAI
 from pydantic import ValidationError
 
 from config import get_settings
 from products import Product
 from schemas import Comparison, ImageFacts
+from scraper.http import fetch_image_bytes
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 IMAGES_DIR = BACKEND_DIR / "data" / "images"
@@ -58,25 +59,44 @@ sentence summary, in Serbian."""
 
 
 @lru_cache
-def _client() -> OpenAI:
+def _client() -> AsyncOpenAI:
     settings = get_settings()
     if not settings.xai_api_key:
         raise RuntimeError("XAI_API_KEY is not set in .env")
-    return OpenAI(api_key=settings.xai_api_key, base_url=settings.xai_base_url)
+    return AsyncOpenAI(api_key=settings.xai_api_key, base_url=settings.xai_base_url)
 
 
-def _image_content(product: Product) -> list[dict]:
+async def _image_part(product: Product, name: str) -> dict | None:
+    """One image as a data: URL, or None if it couldn't be read.
+
+    `name` is a local filename for the hardcoded demo products, or a full
+    remote URL for a live-scraped offer — either way we just need bytes.
+    """
+    if name.startswith(("http://", "https://")):
+        data = await fetch_image_bytes(name)
+        if data is None:
+            return None  # dead link / blocked host — skip it, don't fail the run
+    else:
+        path = IMAGES_DIR / product.id / name
+        if not path.is_file():
+            return None
+        data = path.read_bytes()
+
+    b64 = base64.b64encode(data).decode()
+    return {
+        "type": "image_url",
+        "image_url": {"url": f"data:image/jpeg;base64,{b64}", "detail": "high"},
+    }
+
+
+async def _image_content(product: Product) -> list[dict]:
     content: list[dict] = []
     for name in product.images:
-        data = (IMAGES_DIR / product.id / name).read_bytes()
-        b64 = base64.b64encode(data).decode()
+        part = await _image_part(product, name)
+        if part is None:
+            continue
         content.append({"type": "text", "text": f"Image: {name}"})
-        content.append(
-            {
-                "type": "image_url",
-                "image_url": {"url": f"data:image/jpeg;base64,{b64}", "detail": "high"},
-            }
-        )
+        content.append(part)
     return content
 
 
@@ -86,7 +106,19 @@ def _cache() -> dict:
     return {}
 
 
-def extract_image_facts(product: Product, *, refresh: bool = False) -> ImageFacts:
+_EMPTY_FACTS = {
+    "per_image": [],
+    "product_name": "",
+    "brand": "",
+    "shade": "",
+    "volume": "",
+    "ingredients": [],
+    "warnings": [],
+    "claims": [],
+}
+
+
+async def extract_image_facts(product: Product, *, refresh: bool = False) -> ImageFacts:
     cache = _cache()
     if not refresh and product.id in cache:
         try:
@@ -94,11 +126,16 @@ def extract_image_facts(product: Product, *, refresh: bool = False) -> ImageFact
         except ValidationError:
             pass  # schema changed since this was cached — re-extract below
 
-    completion = _client().chat.completions.parse(
+    content = await _image_content(product)
+    if not content:
+        # every image was unreadable — nothing to compare against, not a crash
+        return ImageFacts.model_validate(_EMPTY_FACTS)
+
+    completion = await _client().chat.completions.parse(
         model=get_settings().xai_model,
         messages=[
             {"role": "system", "content": EXTRACT_PROMPT},
-            {"role": "user", "content": _image_content(product)},
+            {"role": "user", "content": content},
         ],
         response_format=ImageFacts,
     )
@@ -124,14 +161,14 @@ def _offer_payload(product: Product, facts: ImageFacts) -> dict:
     }
 
 
-def compare_products(
+async def compare_products(
     a: Product, b: Product, facts_a: ImageFacts, facts_b: ImageFacts
 ) -> Comparison:
     payload = {
         "listing_a": _offer_payload(a, facts_a),
         "listing_b": _offer_payload(b, facts_b),
     }
-    completion = _client().chat.completions.parse(
+    completion = await _client().chat.completions.parse(
         model=get_settings().xai_model,
         messages=[
             {"role": "system", "content": COMPARE_PROMPT},

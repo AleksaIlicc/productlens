@@ -11,7 +11,7 @@ import re
 from html import unescape
 from typing import Any
 
-from lab.models import ExtractSource, PageFacts, PriceInfo
+from scraper.models import ExtractSource, PageFacts, PriceInfo
 
 LD_JSON_RE = re.compile(
     r'<script[^>]+type\s*=\s*["\']application/ld\+json["\'][^>]*>(.*?)</script>',

@@ -5,11 +5,11 @@ import { createRoot } from 'react-dom/client';
 import { createBrowserRouter, RouterProvider } from 'react-router';
 import './index.css';
 import App from './App.tsx';
-import ScrapeLab from './lab/ScrapeLab.tsx';
+import ScraperPage from './scraper/ScraperPage.tsx';
 
 const router = createBrowserRouter([
   { path: '/', element: <App /> },
-  { path: '/lab', element: <ScrapeLab /> },
+  { path: '/scraper', element: <ScraperPage /> },
 ]);
 
 const queryClient = new QueryClient({

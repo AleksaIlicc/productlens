@@ -10,6 +10,7 @@ import {
   type Product,
   type Status,
 } from './api';
+import { searchProducts } from './search';
 
 const STATUS_LABEL: Record<Status, string> = {
   match: 'poklapa se',
@@ -188,25 +189,49 @@ function ImageFactsPanel({
 
 function App() {
   const products = useQuery({ queryKey: ['products'], queryFn: fetchProducts });
+  // Demo products plus anything a search has turned up in this session —
+  // both are picked from the same two dropdowns below.
+  const [pool, setPool] = useState<Product[] | null>(null);
   const [ids, setIds] = useState<[string, string] | null>(null);
   const [showMatches, setShowMatches] = useState(false);
+  const [query, setQuery] = useState('');
 
   const comparison = useMutation({
-    mutationFn: ([a, b]: [string, string]) => fetchComparison(a, b),
+    mutationFn: ([a, b]: [Product, Product]) => fetchComparison(a, b),
+  });
+
+  const search = useMutation({
+    mutationFn: searchProducts,
+    onSuccess: ({ products: found }) => {
+      if (!found.length) return;
+      setPool((prev) => {
+        const merged = new Map((prev ?? []).map((p) => [p.id, p]));
+        for (const p of found) merged.set(p.id, p);
+        return [...merged.values()];
+      });
+      // Drop the top hit straight into slot B so the result is visible at a
+      // glance; the dropdowns are still there to pick anything else found.
+      setIds((prev) => (prev ? [prev[0], found[0].id] : prev));
+      comparison.reset();
+    },
   });
 
   useEffect(() => {
-    if (!ids && products.data && products.data.length >= 2) {
-      setIds([products.data[0].id, products.data[1].id]);
+    if (!pool && products.data) setPool(products.data);
+  }, [pool, products.data]);
+
+  useEffect(() => {
+    if (!ids && pool && pool.length >= 2) {
+      setIds([pool[0].id, pool[1].id]);
     }
-  }, [ids, products.data]);
+  }, [ids, pool]);
 
   if (products.isPending) return <p className="p-8">Učitavanje proizvoda…</p>;
   if (products.error)
     return <p className="p-8 text-rose-600">{products.error.message}</p>;
-  if (!ids || !products.data) return null;
+  if (!ids || !pool) return null;
 
-  const pick = (id: string) => products.data.find((p) => p.id === id);
+  const pick = (id: string) => pool.find((p) => p.id === id);
   const [a, b] = [pick(ids[0]), pick(ids[1])];
   if (!a || !b) return null;
 
@@ -220,13 +245,61 @@ function App() {
 
   return (
     <main className="mx-auto max-w-6xl p-6">
-      <h1 className="text-2xl font-bold">ProductLens</h1>
+      <div className="flex items-baseline justify-between gap-3">
+        <h1 className="text-2xl font-bold">ProductLens</h1>
+        <a
+          href="/scraper"
+          className="text-sm text-sky-700 hover:underline dark:text-sky-400"
+        >
+          napredni prikaz pretrage →
+        </a>
+      </div>
       <p className="mt-1 text-slate-600 dark:text-slate-400">
         Poređenje iste stavke na dve prodavnice — tekst sa sajta plus podaci
         pročitani sa fotografija, pa LLM traži neslaganja.
       </p>
 
-      <div className="mt-6 flex flex-wrap items-center gap-3">
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (query.trim()) search.mutate(query.trim());
+        }}
+        className="mt-6 flex flex-wrap gap-2"
+      >
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Pretraži proizvod, npr. Fenty Beauty Pro Filt'r 220"
+          className={`${card} min-w-[18rem] flex-1 px-3 py-2 text-sm`}
+        />
+        <button
+          type="submit"
+          disabled={search.isPending || !query.trim()}
+          className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40 dark:bg-slate-100 dark:text-slate-900"
+        >
+          {search.isPending ? 'Tražim…' : 'Pretraži'}
+        </button>
+      </form>
+      {search.isPending && (
+        <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+          Tražim i skrejpujem najbolje strane — traje 15–60 s.
+        </p>
+      )}
+      {search.error && (
+        <p className="mt-2 text-sm text-rose-600">
+          {(search.error as Error).message}
+        </p>
+      )}
+      {search.data && (
+        <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+          Pronađeno {search.data.products.length} ponuda (
+          {search.data.run.totals.scraped_rs} domaćih /{' '}
+          {search.data.run.totals.scraped_world} svetskih) — dodate u padajuće
+          liste ispod.
+        </p>
+      )}
+
+      <div className="mt-4 flex flex-wrap items-center gap-3">
         {([0, 1] as const).map((slot) => (
           <select
             key={slot}
@@ -239,16 +312,17 @@ function App() {
             }}
             className={`${card} px-3 py-2 text-sm`}
           >
-            {products.data.map((p) => (
+            {pool.map((p) => (
               <option key={p.id} value={p.id}>
                 {slot === 0 ? 'A' : 'B'}: {p.source}
+                {p.title ? ` — ${p.title}` : ''}
               </option>
             ))}
           </select>
         ))}
         <button
           type="button"
-          onClick={() => comparison.mutate(ids)}
+          onClick={() => comparison.mutate([a, b])}
           disabled={comparison.isPending || ids[0] === ids[1]}
           className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40 dark:bg-slate-100 dark:text-slate-900"
         >

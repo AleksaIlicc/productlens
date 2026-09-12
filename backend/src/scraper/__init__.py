@@ -1,1 +1,1 @@
-# See docs/scraping-lab.md and lab/router.py for what this package does.
+# See docs/scraping.md and scraper/router.py for what this package does.

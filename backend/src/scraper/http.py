@@ -3,13 +3,17 @@ raises for network/HTTP problems: callers get a result object and keep going.
 """
 
 import asyncio
+import ipaddress
 import random
+import socket
 from dataclasses import dataclass, field
 from typing import Any, Awaitable, Callable
+from urllib.parse import urlsplit
 
 import httpx2
 
 RETRY_STATUSES = (408, 425, 429, 500, 502, 503, 504)
+ALLOWED_PUBLIC_PORTS = (80, 443)
 
 
 @dataclass
@@ -140,3 +144,72 @@ async def get_bytes(
         except Exception as exc:
             return None, b"", "", f"{type(exc).__name__}: {exc}"[:200]
     return None, b"", "", "too many redirects"
+
+
+async def public_url_problem(url: str) -> str:
+    """SSRF guard: public http(s) hosts on standard ports only, per redirect hop.
+
+    Shared by the image proxy route and the comparison step's own image fetch —
+    every caller that follows a shop-supplied URL needs this same check.
+    """
+    parts = urlsplit(url)
+    if parts.scheme not in ("http", "https"):
+        return "dozvoljeni su samo http i https"
+    host = parts.hostname
+    if not host:
+        return "nedostaje host"
+    port = parts.port or (443 if parts.scheme == "https" else 80)
+    if port not in ALLOWED_PUBLIC_PORTS:
+        return f"port {port} nije dozvoljen"
+    try:
+        infos = await asyncio.get_running_loop().getaddrinfo(
+            host, port, proto=socket.IPPROTO_TCP
+        )
+    except OSError:
+        return "host se ne može razrešiti"
+    for info in infos:
+        address = info[4][0]
+        try:
+            ip = ipaddress.ip_address(address.split("%")[0])
+        except ValueError:
+            return "neispravna IP adresa"
+        if (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_reserved
+            or ip.is_multicast
+            or ip.is_unspecified
+        ):
+            return "privatne i lokalne adrese nisu dozvoljene"
+        mapped = getattr(ip, "ipv4_mapped", None)
+        if mapped is not None and (
+            mapped.is_private or mapped.is_loopback or mapped.is_link_local
+        ):
+            return "privatne i lokalne adrese nisu dozvoljene"
+    return ""
+
+
+async def fetch_image_bytes(
+    url: str, *, timeout: float = 20.0, max_bytes: int = 8 * 1024 * 1024
+) -> bytes | None:
+    """Fetch one image for the vision step, or None if it's unsafe/unreachable.
+
+    Unlike the `/image` proxy route, callers here don't need to know *why* an
+    image was skipped — a dead link or a blocked host is just one fewer photo
+    for the model to look at, not a request that should fail.
+    """
+    if await public_url_problem(url):
+        return None
+    status, body, content_type, error = await get_bytes(
+        url,
+        timeout=timeout,
+        max_bytes=max_bytes,
+        headers={"User-Agent": "Mozilla/5.0 (compatible; ProductLensScraper/0.1)"},
+        validate=public_url_problem,
+    )
+    if error or status is None or status >= 400 or not body:
+        return None
+    if not content_type.startswith("image/"):
+        return None
+    return body

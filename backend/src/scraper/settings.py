@@ -5,12 +5,12 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
 DATA_DIR = BACKEND_DIR / "data"
-CACHE_DIR = DATA_DIR / "lab_cache"
-RUNS_DIR = DATA_DIR / "lab_runs"
+CACHE_DIR = DATA_DIR / "scraper_cache"
+RUNS_DIR = DATA_DIR / "scraper_runs"
 
 
-class LabSettings(BaseSettings):
-    """Config for the scraping lab; shares the app .env, ignores unrelated keys."""
+class ScraperSettings(BaseSettings):
+    """Config for the scraper; shares the app .env, ignores unrelated keys."""
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
@@ -19,19 +19,19 @@ class LabSettings(BaseSettings):
     firecrawl_base_url: str = "https://api.firecrawl.dev/v2"
     exa_base_url: str = "https://api.exa.ai"
 
-    lab_http_timeout: float = 120.0
-    lab_scrape_timeout_ms: int = 45000
-    lab_scrape_concurrency: int = 4
-    lab_search_concurrency: int = 6
-    lab_retry_attempts: int = 3
+    http_timeout: float = 120.0
+    scrape_timeout_ms: int = 45000
+    scrape_concurrency: int = 4
+    search_concurrency: int = 6
+    retry_attempts: int = 3
 
-    lab_cache_enabled: bool = True
-    lab_cache_ttl_hours: int = 24
-    lab_max_markdown_chars: int = 20000
-    lab_max_images: int = 12
-    lab_max_image_bytes: int = 8 * 1024 * 1024
+    cache_enabled: bool = True
+    cache_ttl_hours: int = 24
+    max_markdown_chars: int = 20000
+    max_images: int = 12
+    max_image_bytes: int = 8 * 1024 * 1024
 
 
 @lru_cache
-def get_lab_settings() -> LabSettings:
-    return LabSettings()
+def get_scraper_settings() -> ScraperSettings:
+    return ScraperSettings()

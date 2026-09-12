@@ -8,8 +8,8 @@ import re
 from collections.abc import Iterable
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
-from lab.models import ImageRef
-from lab.urls import absolutize
+from scraper.models import ImageRef
+from scraper.urls import absolutize
 
 # Filename/path fragments that are site furniture, never the product.
 JUNK_PATTERNS = (
