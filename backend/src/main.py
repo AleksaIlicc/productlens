@@ -13,7 +13,7 @@ settings = get_settings()
 app = FastAPI(title=settings.app_name, debug=settings.debug)
 app.mount(
     "/images",
-    StaticFiles(directory=Path(__file__).parent / "data" / "images"),
+    StaticFiles(directory=Path(__file__).resolve().parent.parent / "data" / "images"),
     name="images",
 )
 

@@ -21,11 +21,7 @@ dev = [
 
 [tool.ruff]
 target-version = "py313"
+src = ["src"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I"]
-
-[tool.ruff.lint.per-file-ignores]
-# Doslovno prepisan tekst sa sajtova i dugacki promptovi.
-"products.py" = ["E501"]
-"llm.py" = ["E501"]

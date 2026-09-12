@@ -9,7 +9,7 @@ Trenutno su hardkodirana dva izvora za isti artikal (Vichy Dermablend Corrector 
 
 ## Workflow
 
-1. **Podaci sa sajta** — naslov, cena, specifikacija i opisne sekcije su prepisani u `backend/products.py`, fotografije su skinute u `backend/data/images/<id>/`.
+1. **Podaci sa sajta** — naslov, cena, specifikacija i opisne sekcije su prepisani u `backend/data/products.json`, fotografije su skinute u `backend/data/images/<id>/`.
 2. **Podaci sa slika** — jedan vision poziv po ponudi pročita sve fotografije i vrati strukturirane podatke (tekst sa ambalaže, nijansa, zapremina, SPF, tvrdnje). Rezultat se kešira u `backend/data/image_facts.cache.json`.
 3. **Poređenje** — oba skupa podataka (sajt + slike) idu u jedan poziv koji vraća listu polja sa statusom (`match` / `minor` / `mismatch` / `missing`), ozbiljnošću i objašnjenjem razlike na srpskom.
 
@@ -19,7 +19,7 @@ Trenutno su hardkodirana dva izvora za isti artikal (Vichy Dermablend Corrector 
 # backend (http://127.0.0.1:8000)
 cd backend
 cp .env.example .env   # upisi XAI_API_KEY
-uv run uvicorn main:app --reload
+uv run uvicorn main:app --reload --app-dir src
 
 # frontend (http://localhost:5173), proksira /api i /images na backend
 cd frontend
@@ -39,4 +39,13 @@ Poređenje traje ~2 minuta (grok-4.6 je reasoning model); čitanje slika se radi
 
 ## Dodavanje novog proizvoda
 
-Skini slike u `backend/data/images/<novi-id>/` i dodaj `Product(...)` u `PRODUCTS` u `backend/products.py`. Frontend ga automatski pokupi u dropdown-ovima.
+Skini slike u `backend/data/images/<novi-id>/` i dodaj novi objekat u listu u `backend/data/products.json`. Frontend ga automatski pokupi u dropdown-ovima.
+
+## Struktura backend-a
+
+```
+backend/
+  src/          # aplikacioni kod (config, main, llm, products, schemas)
+  tests/        # manuelna provera konekcije ka xAI API-ju
+  data/         # products.json, keš pročitanih slika, fotografije proizvoda
+```

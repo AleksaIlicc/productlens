@@ -6,8 +6,6 @@ from products import Product
 
 
 class ImageFinding(BaseModel):
-    """Šta je viđeno na jednoj fotografiji."""
-
     image: str
     role: str
     visible_text: list[str]
@@ -16,8 +14,6 @@ class ImageFinding(BaseModel):
 
 
 class ImageFacts(BaseModel):
-    """Podaci o proizvodu izvučeni iz svih fotografija jedne ponude."""
-
     per_image: list[ImageFinding]
     product_name: str
     brand: str
