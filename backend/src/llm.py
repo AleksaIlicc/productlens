@@ -4,6 +4,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from openai import OpenAI
+from pydantic import ValidationError
 
 from config import get_settings
 from products import Product
@@ -13,51 +14,47 @@ BACKEND_DIR = Path(__file__).resolve().parent.parent
 IMAGES_DIR = BACKEND_DIR / "data" / "images"
 CACHE_FILE = BACKEND_DIR / "data" / "image_facts.cache.json"
 
-EXTRACT_PROMPT = """You are a quality-control assistant for product data.
+EXTRACT_PROMPT = """You read product photos like a mystery shopper collecting
+evidence. Extract ONLY what is actually visible — nothing assumed from general
+brand knowledge.
 
-You are given photos of a single product listing, in order, each preceded by its
-filename. Extract ONLY what is actually visible in the images (text on the packaging,
-the ingredients label, marketing banners, shade swatches). Do not assume or fill in
-anything from general brand knowledge.
+For each image: its filename, its role (e.g. "packaging front", "packaging
+back / ingredients label", "marketing banner", "shade swatch"), visible_text
+(every readable string, verbatim), and a short note in Serbian.
 
-For each image, fill in:
-- image: the filename
-- role: what the image shows (e.g. "front of the packaging", "ingredients label",
-  "marketing banner", "shade swatch", "product texture")
-- visible_text: every piece of readable text on the image, verbatim
-- claims: marketing claims shown on that image (e.g. "16h", "SPF 35", "non-comedogenic")
-- notes: a short observation, written in Serbian
+Then combine everything into one set of facts for the listing: product_name,
+brand, shade, volume, ingredients (the INCI list, if visible), warnings (any
+safety/allergy claim), and claims (other marketing claims, e.g. "16h",
+"SPF 35"). Use an empty string or empty list for anything not visible. Write
+in Serbian, except for text copied verbatim from the packaging."""
 
-Then fill in the combined facts for the whole listing (product_name, brand, shade,
-volume, spf, claims). If something isn't visible anywhere, use an empty string or an
-empty list. Write in Serbian, except for text you copy verbatim from the packaging."""
+COMPARE_PROMPT = """You audit whether a retailer's product listing matches the
+brand's official content — a mystery shopper checking for a mislabeled shade,
+wrong volume, missing ingredients or safety warnings, and photos that don't
+match the listing text. Price, availability, SKU and category are out of
+scope: don't mention them.
 
-COMPARE_PROMPT = """You are a quality-control assistant for a product catalog.
+You get two listings of the same (allegedly) product: text scraped from each
+site plus facts a vision model read from each one's photos.
 
-You are given two listings of the same (allegedly) product from two different
-websites. For each one you get: the data scraped from the site (title, price, specs,
-description sections) and the data a vision model read from the photos.
+Check exactly these seven dimensions, one result each — no more, no fewer:
+product_identity, brand, shade, volume, ingredients, warnings, images_vs_text.
 
-Compare them field by field and report EVERY discrepancy. You must cover at least:
-product identity, brand, shade, volume/packaging, SPF, price, SKU/barcode,
-ingredients (INCI), description content, usage instructions, and whether the images
-match the text.
+For each dimension:
+- value_a / value_b: what each listing states; "—" if not stated at all.
+- origin: "web", "image", or "both".
+- status: "match", "minor" (same substance, different wording), "mismatch"
+  (materially different), "missing" (stated on only one side).
+- severity: "high" if it could mislead a buyer or is a compliance risk (wrong
+  shade, wrong volume, missing ingredients/warnings), "medium" for a real gap,
+  "low" for a wording nuance, "info" only when you must report a match anyway.
+- explanation: what differs and why it matters, in Serbian.
 
-Rules:
-- value_a is the value from listing A, value_b from listing B; use "—" if missing.
-- origin: "web" if the field comes from the site, "image" if from the photos, "both"
-  if from both.
-- status: "match" (identical), "minor" (same substance, different wording/format),
-  "mismatch" (actually different), "missing" (present on only one side).
-- severity: "high" if the mismatch means it's a different product or misleads the
-  buyer (shade, volume, SPF, ingredients), "medium" for price and missing important
-  information, "low" for formatting/style differences, "info" for matching fields.
-- explanation: clearly explain WHAT the difference is and why it matters. Write in
-  Serbian.
-- Don't report the same discrepancy twice and don't invent fields.
+If you're not sure something actually differs, mark it "match" rather than
+guessing — don't invent findings.
 
-same_product: whether this is physically the same item. verdict: a 2-3 sentence
-conclusion, written in Serbian."""
+same_product: whether this is physically the same item. verdict: a 2-3
+sentence summary, in Serbian."""
 
 
 @lru_cache
@@ -92,7 +89,10 @@ def _cache() -> dict:
 def extract_image_facts(product: Product, *, refresh: bool = False) -> ImageFacts:
     cache = _cache()
     if not refresh and product.id in cache:
-        return ImageFacts.model_validate(cache[product.id])
+        try:
+            return ImageFacts.model_validate(cache[product.id])
+        except ValidationError:
+            pass  # schema changed since this was cached — re-extract below
 
     completion = _client().chat.completions.parse(
         model=get_settings().xai_model,
@@ -118,11 +118,7 @@ def _offer_payload(product: Product, facts: ImageFacts) -> dict:
         "from_website": {
             "title": product.title,
             "brand": product.brand,
-            "price": product.price,
-            "availability": product.availability,
-            "specs": product.specs,
-            "sections": product.sections,
-            "image_count": len(product.images),
+            "text": product.raw_text,
         },
         "from_images": facts.model_dump(),
     }

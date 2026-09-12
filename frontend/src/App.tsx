@@ -1,6 +1,7 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import {
+  type ComparisonField,
   type FieldComparison,
   fetchComparison,
   fetchProducts,
@@ -15,6 +16,16 @@ const STATUS_LABEL: Record<Status, string> = {
   minor: 'sitna razlika',
   mismatch: 'neslaganje',
   missing: 'nedostaje',
+};
+
+const FIELD_LABEL: Record<ComparisonField, string> = {
+  product_identity: 'identitet proizvoda',
+  brand: 'brend',
+  shade: 'nijansa',
+  volume: 'zapremina',
+  ingredients: 'sastojci (INCI)',
+  warnings: 'upozorenja',
+  images_vs_text: 'slike naspram teksta',
 };
 
 const STATUS_STYLE: Record<Status, string> = {
@@ -53,7 +64,9 @@ function ProductCard({ product, label }: { product: Product; label: string }) {
           </a>
         </div>
         <h2 className="mt-2 text-base font-semibold">{product.title}</h2>
-        <p className="mt-1 text-lg font-bold tabular-nums">{product.price}</p>
+        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+          {product.brand}
+        </p>
       </header>
 
       <div className="flex gap-2 overflow-x-auto p-4">
@@ -67,28 +80,14 @@ function ProductCard({ product, label }: { product: Product; label: string }) {
         ))}
       </div>
 
-      <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 border-t border-slate-200 p-4 text-sm dark:border-slate-800">
-        {Object.entries(product.specs).map(([key, value]) => (
-          <div key={key} className="col-span-2 grid grid-cols-subgrid">
-            <dt className="text-slate-500 dark:text-slate-400">{key}</dt>
-            <dd>{value}</dd>
-          </div>
-        ))}
-      </dl>
-
-      {Object.entries(product.sections).map(([title, text]) => (
-        <details
-          key={title}
-          className="border-t border-slate-200 dark:border-slate-800"
-        >
-          <summary className="cursor-pointer p-4 text-sm font-medium">
-            {title}
-          </summary>
-          <p className="whitespace-pre-line px-4 pb-4 text-sm text-slate-600 dark:text-slate-400">
-            {text}
-          </p>
-        </details>
-      ))}
+      <details className="border-t border-slate-200 dark:border-slate-800">
+        <summary className="cursor-pointer p-4 text-sm font-medium">
+          Sadržaj sa sajta
+        </summary>
+        <p className="whitespace-pre-line px-4 pb-4 text-sm text-slate-600 dark:text-slate-400">
+          {product.raw_text}
+        </p>
+      </details>
     </article>
   );
 }
@@ -110,7 +109,7 @@ function ComparisonCard({
         >
           {STATUS_LABEL[field.status]}
         </span>
-        <h3 className="font-semibold">{field.field}</h3>
+        <h3 className="font-semibold">{FIELD_LABEL[field.field]}</h3>
         <span className="text-xs text-slate-500 dark:text-slate-400">
           {ORIGIN_LABEL[field.origin]} · ozbiljnost: {field.severity}
         </span>
@@ -150,7 +149,8 @@ function ImageFactsPanel({
     ['Brend', facts.brand],
     ['Nijansa', facts.shade],
     ['Zapremina', facts.volume],
-    ['SPF', facts.spf],
+    ['Sastojci', facts.ingredients.join(' · ')],
+    ['Upozorenja', facts.warnings.join(' · ')],
   ];
   return (
     <div className={`${card} p-4`}>
