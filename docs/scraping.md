@@ -147,15 +147,22 @@ skorovi, pozivi provajdera), dok glavna strana zove isti `/discover` sa
 razumnim podrazumevanim opcijama i ne prikazuje te detalje.
 
 **Drugi filter slika, na LLM strani** (`backend/src/llm.py`): pošto se slike
-preuzmu, ako ih ima 3+ jedan jeftin/brz model (`xai_filter_model`, podrazumevano
-`grok-4.20-0309-non-reasoning`, ~2s po pozivu naspram ~150-200s za reasoning
-model) dobije naziv proizvoda plus sve fotografije i vrati koje od njih
-stvarno prikazuju baš taj proizvod. Ovo hvata upravo ono što heuristika u
-`images.py` ne može — prave fotografije DRUGOG proizvoda koje su se našle na
-istoj strani (npr. generalni retailer sa "srodni proizvodi" galerijom).
-Uz to, slike manje od 512 piksela (ikonice koje heuristika promaši) se
-odbacuju pre slanja — xAI vision API inače odbije ceo poziv zbog jedne
-premalene slike. Odgovor `/api/compare` vraća `a`/`b` sa `images` suženim na
+preuzmu, ako ih ima 3+ jedan manji model (`xai_filter_model`) dobije naziv
+proizvoda plus sve fotografije i vrati koje pripadaju toj ponudi. Ovo hvata
+ono što heuristika u `images.py` ne može — prave fotografije DRUGOG proizvoda
+sa iste strane (npr. generalni retailer sa „srodni proizvodi" galerijom).
+
+Granica je namerno postavljena ovako: **drugi proizvod i chrome sajta se
+bacaju, ista linija u pogrešnoj nijansi/varijanti se ZADRŽAVA.** Prodavnica
+koja uz „35 Sand" prikazuje baner sa tubom „25 Nude" je upravo nalaz koji
+poređenje treba da prijavi, pa filter ne sme tiho da ukloni dokaz. Uz to,
+prompt greši u korist zadržavanja („ako nisi siguran, zadrži") da ne bismo
+za neku ponudu ostali bez ijedne slike.
+
+Pre slanja se odbacuju i slike manje od 512 piksela, kao i formati koje API
+ne dekodira (GIF, BMP, AVIF — Pillow ih otvara, xAI ne prima). Oba su nužna
+jer xAI vision API zbog **jedne** neupotrebljive slike odbije ceo poziv, a
+svaka slika se šalje sa svojim stvarnim media tipom, ne paušalno kao JPEG. Odgovor `/api/compare` vraća `a`/`b` sa `images` suženim na
 ono što je stvarno analizirano (`main._analyzed`), tako da UI posle poređenja
 prikazuje istu galeriju koju je i model video.
 
