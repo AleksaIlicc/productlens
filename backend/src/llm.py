@@ -12,7 +12,6 @@ from schemas import Comparison, ImageFacts
 from scraper.http import fetch_image_bytes
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
-IMAGES_DIR = BACKEND_DIR / "data" / "images"
 CACHE_FILE = BACKEND_DIR / "data" / "image_facts.cache.json"
 
 EXTRACT_PROMPT = """You read product photos like a mystery shopper collecting
@@ -66,22 +65,12 @@ def _client() -> AsyncOpenAI:
     return AsyncOpenAI(api_key=settings.xai_api_key, base_url=settings.xai_base_url)
 
 
-async def _image_part(product: Product, name: str) -> dict | None:
-    """One image as a data: URL, or None if it couldn't be read.
-
-    `name` is a local filename for the hardcoded demo products, or a full
-    remote URL for a live-scraped offer — either way we just need bytes.
-    """
-    if name.startswith(("http://", "https://")):
-        data = await fetch_image_bytes(name)
-        if data is None:
-            return None  # dead link / blocked host — skip it, don't fail the run
-    else:
-        path = IMAGES_DIR / product.id / name
-        if not path.is_file():
-            return None
-        data = path.read_bytes()
-
+async def _image_part(url: str) -> dict | None:
+    """One image as a data: URL, or None if it couldn't be fetched — a dead
+    link or a blocked host just means one fewer photo, not a failed run."""
+    data = await fetch_image_bytes(url)
+    if data is None:
+        return None
     b64 = base64.b64encode(data).decode()
     return {
         "type": "image_url",
@@ -91,11 +80,11 @@ async def _image_part(product: Product, name: str) -> dict | None:
 
 async def _image_content(product: Product) -> list[dict]:
     content: list[dict] = []
-    for name in product.images:
-        part = await _image_part(product, name)
+    for url in product.images:
+        part = await _image_part(url)
         if part is None:
             continue
-        content.append({"type": "text", "text": f"Image: {name}"})
+        content.append({"type": "text", "text": f"Image: {url}"})
         content.append(part)
     return content
 

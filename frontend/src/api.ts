@@ -64,13 +64,10 @@ export type CompareResponse = {
   comparison: Comparison;
 };
 
-// A product's image entries are either a local demo filename ("1.jpg") or a
-// full remote URL (a live search result) — the latter goes through the
-// scraper's image proxy so shop hotlink-protection can't blank it out.
-export const imageUrl = (productId: string, name: string) =>
-  name.startsWith('http')
-    ? `/api/scraper/image?url=${encodeURIComponent(name)}`
-    : `/images/${productId}/${name}`;
+// Every image is a remote URL from a live search result; route it through the
+// scraper's proxy so shop hotlink-protection can't blank it out.
+export const imageUrl = (url: string) =>
+  `/api/scraper/image?url=${encodeURIComponent(url)}`;
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
@@ -81,11 +78,9 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
   return res.json();
 }
 
-export const fetchProducts = () => request<Product[]>('/api/products');
-
-// `a`/`b` are either a demo product id ("jankovic") or a full Product — e.g.
-// one built from a live search result (see offerToProduct in search.ts).
-export const fetchComparison = (a: string | Product, b: string | Product) =>
+// `a`/`b` are built client-side from a live search result — see
+// offerToProduct in search.ts.
+export const fetchComparison = (a: Product, b: Product) =>
   request<CompareResponse>('/api/compare', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

@@ -1,10 +1,9 @@
-import { useMutation, useQuery } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useMutation } from '@tanstack/react-query';
+import { useState } from 'react';
 import {
   type ComparisonField,
   type FieldComparison,
   fetchComparison,
-  fetchProducts,
   type ImageFacts,
   imageUrl,
   type Product,
@@ -71,11 +70,11 @@ function ProductCard({ product, label }: { product: Product; label: string }) {
       </header>
 
       <div className="flex gap-2 overflow-x-auto p-4">
-        {product.images.map((name) => (
+        {product.images.map((url) => (
           <img
-            key={name}
-            src={imageUrl(product.id, name)}
-            alt={`${product.title} — ${name}`}
+            key={url}
+            src={imageUrl(url)}
+            alt={product.title}
             className="h-20 w-20 shrink-0 rounded-lg border border-slate-200 bg-white object-contain dark:border-slate-800"
           />
         ))}
@@ -168,8 +167,8 @@ function ImageFactsPanel({
         <details key={finding.image} className="mt-2 text-sm">
           <summary className="cursor-pointer">
             <img
-              src={imageUrl(product.id, finding.image)}
-              alt={finding.image}
+              src={imageUrl(finding.image)}
+              alt={finding.role}
               className="mr-2 inline-block h-10 w-10 rounded border border-slate-200 bg-white object-contain align-middle dark:border-slate-800"
             />
             {finding.role}
@@ -188,10 +187,9 @@ function ImageFactsPanel({
 }
 
 function App() {
-  const products = useQuery({ queryKey: ['products'], queryFn: fetchProducts });
-  // Demo products plus anything a search has turned up in this session —
-  // both are picked from the same two dropdowns below.
-  const [pool, setPool] = useState<Product[] | null>(null);
+  // Everything selectable comes from search results found so far this
+  // session — there's no seed data, both dropdowns pick from this pool.
+  const [pool, setPool] = useState<Product[]>([]);
   const [ids, setIds] = useState<[string, string] | null>(null);
   const [showMatches, setShowMatches] = useState(false);
   const [query, setQuery] = useState('');
@@ -205,36 +203,22 @@ function App() {
     onSuccess: ({ products: found }) => {
       if (!found.length) return;
       setPool((prev) => {
-        const merged = new Map((prev ?? []).map((p) => [p.id, p]));
+        const merged = new Map(prev.map((p) => [p.id, p]));
         for (const p of found) merged.set(p.id, p);
         return [...merged.values()];
       });
-      // Drop the top hit straight into slot B so the result is visible at a
-      // glance; the dropdowns are still there to pick anything else found.
-      setIds((prev) => (prev ? [prev[0], found[0].id] : prev));
+      // First search that turns up at least two offers: pre-fill both
+      // slots so a result is visible right away.
+      setIds(
+        (prev) =>
+          prev ?? (found.length >= 2 ? [found[0].id, found[1].id] : prev),
+      );
       comparison.reset();
     },
   });
 
-  useEffect(() => {
-    if (!pool && products.data) setPool(products.data);
-  }, [pool, products.data]);
-
-  useEffect(() => {
-    if (!ids && pool && pool.length >= 2) {
-      setIds([pool[0].id, pool[1].id]);
-    }
-  }, [ids, pool]);
-
-  if (products.isPending) return <p className="p-8">Učitavanje proizvoda…</p>;
-  if (products.error)
-    return <p className="p-8 text-rose-600">{products.error.message}</p>;
-  if (!ids || !pool) return null;
-
   const pick = (id: string) => pool.find((p) => p.id === id);
-  const [a, b] = [pick(ids[0]), pick(ids[1])];
-  if (!a || !b) return null;
-
+  const [a, b] = ids ? [pick(ids[0]), pick(ids[1])] : [undefined, undefined];
   const result = comparison.data;
   const fields =
     result?.comparison.fields.filter(
@@ -299,106 +283,120 @@ function App() {
         </p>
       )}
 
-      <div className="mt-4 flex flex-wrap items-center gap-3">
-        {([0, 1] as const).map((slot) => (
-          <select
-            key={slot}
-            value={ids[slot]}
-            onChange={(e) => {
-              const next: [string, string] = [...ids];
-              next[slot] = e.target.value;
-              setIds(next);
-              comparison.reset();
-            }}
-            className={`${card} px-3 py-2 text-sm`}
-          >
-            {pool.map((p) => (
-              <option key={p.id} value={p.id}>
-                {slot === 0 ? 'A' : 'B'}: {p.source}
-                {p.title ? ` — ${p.title}` : ''}
-              </option>
-            ))}
-          </select>
-        ))}
-        <button
-          type="button"
-          onClick={() => comparison.mutate([a, b])}
-          disabled={comparison.isPending || ids[0] === ids[1]}
-          className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40 dark:bg-slate-100 dark:text-slate-900"
+      {!ids && !search.isPending && (
+        <p
+          className={`${card} mt-4 p-4 text-sm text-slate-500 dark:text-slate-400`}
         >
-          {comparison.isPending ? 'Analiziram…' : 'Uporedi preko LLM-a'}
-        </button>
-        {ids[0] === ids[1] && (
-          <span className="text-sm text-amber-600">
-            Izaberi dve različite ponude.
-          </span>
-        )}
-      </div>
-
-      <section className="mt-6 grid gap-4 lg:grid-cols-2">
-        <ProductCard product={a} label="A" />
-        <ProductCard product={b} label="B" />
-      </section>
-
-      {comparison.error && (
-        <p className="mt-6 text-rose-600">
-          {(comparison.error as Error).message}
+          Pretraži proizvod da dobiješ ponude sa različitih sajtova za
+          poređenje.
         </p>
       )}
 
-      {result && (
-        <section className="mt-8">
-          <div className={`${card} p-4`}>
-            <div className="flex flex-wrap items-center gap-2">
-              <span
-                className={`rounded px-2 py-0.5 text-xs font-semibold ${
-                  result.comparison.same_product
-                    ? STATUS_STYLE.match
-                    : STATUS_STYLE.mismatch
-                }`}
+      {ids && a && b && (
+        <>
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            {([0, 1] as const).map((slot) => (
+              <select
+                key={slot}
+                value={ids[slot]}
+                onChange={(e) => {
+                  const next: [string, string] = [...ids];
+                  next[slot] = e.target.value;
+                  setIds(next);
+                  comparison.reset();
+                }}
+                className={`${card} px-3 py-2 text-sm`}
               >
-                {result.comparison.same_product
-                  ? 'isti proizvod'
-                  : 'različit proizvod'}
-              </span>
-              <span className="text-sm text-slate-500 dark:text-slate-400">
-                {flagged} flagovanih polja od {result.comparison.fields.length}
-              </span>
-            </div>
-            <p className="mt-2">{result.comparison.verdict}</p>
-          </div>
-
-          <div className="mt-6 flex items-center justify-between">
-            <h2 className="text-lg font-semibold">Razlike</h2>
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={showMatches}
-                onChange={(e) => setShowMatches(e.target.checked)}
-              />
-              prikaži i polja koja se poklapaju
-            </label>
-          </div>
-
-          <ul className="mt-3 grid gap-3">
-            {fields.map((field) => (
-              <ComparisonCard
-                key={field.field}
-                field={field}
-                a={a.source}
-                b={b.source}
-              />
+                {pool.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {slot === 0 ? 'A' : 'B'}: {p.source}
+                    {p.title ? ` — ${p.title}` : ''}
+                  </option>
+                ))}
+              </select>
             ))}
-          </ul>
-
-          <h2 className="mt-8 text-lg font-semibold">
-            Šta je model pročitao sa slika
-          </h2>
-          <div className="mt-3 grid gap-4 lg:grid-cols-2">
-            <ImageFactsPanel product={a} facts={result.image_facts_a} />
-            <ImageFactsPanel product={b} facts={result.image_facts_b} />
+            <button
+              type="button"
+              onClick={() => comparison.mutate([a, b])}
+              disabled={comparison.isPending || ids[0] === ids[1]}
+              className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40 dark:bg-slate-100 dark:text-slate-900"
+            >
+              {comparison.isPending ? 'Analiziram…' : 'Uporedi preko LLM-a'}
+            </button>
+            {ids[0] === ids[1] && (
+              <span className="text-sm text-amber-600">
+                Izaberi dve različite ponude.
+              </span>
+            )}
           </div>
-        </section>
+
+          <section className="mt-6 grid gap-4 lg:grid-cols-2">
+            <ProductCard product={a} label="A" />
+            <ProductCard product={b} label="B" />
+          </section>
+
+          {comparison.error && (
+            <p className="mt-6 text-rose-600">
+              {(comparison.error as Error).message}
+            </p>
+          )}
+
+          {result && (
+            <section className="mt-8">
+              <div className={`${card} p-4`}>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span
+                    className={`rounded px-2 py-0.5 text-xs font-semibold ${
+                      result.comparison.same_product
+                        ? STATUS_STYLE.match
+                        : STATUS_STYLE.mismatch
+                    }`}
+                  >
+                    {result.comparison.same_product
+                      ? 'isti proizvod'
+                      : 'različit proizvod'}
+                  </span>
+                  <span className="text-sm text-slate-500 dark:text-slate-400">
+                    {flagged} flagovanih polja od{' '}
+                    {result.comparison.fields.length}
+                  </span>
+                </div>
+                <p className="mt-2">{result.comparison.verdict}</p>
+              </div>
+
+              <div className="mt-6 flex items-center justify-between">
+                <h2 className="text-lg font-semibold">Razlike</h2>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={showMatches}
+                    onChange={(e) => setShowMatches(e.target.checked)}
+                  />
+                  prikaži i polja koja se poklapaju
+                </label>
+              </div>
+
+              <ul className="mt-3 grid gap-3">
+                {fields.map((field) => (
+                  <ComparisonCard
+                    key={field.field}
+                    field={field}
+                    a={a.source}
+                    b={b.source}
+                  />
+                ))}
+              </ul>
+
+              <h2 className="mt-8 text-lg font-semibold">
+                Šta je model pročitao sa slika
+              </h2>
+              <div className="mt-3 grid gap-4 lg:grid-cols-2">
+                <ImageFactsPanel product={a} facts={result.image_facts_a} />
+                <ImageFactsPanel product={b} facts={result.image_facts_b} />
+              </div>
+            </section>
+          )}
+        </>
       )}
     </main>
   );

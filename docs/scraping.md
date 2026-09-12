@@ -133,14 +133,13 @@ To je jedina stvar koju LLM korak treba od nas:
 ```
 
 **Ovo je spojeno** sa LLM delom (`frontend/src/search.ts`): svaki `offer` se
-klijentski pretvori u isti `Product` oblik koji koriste hardkodirane ponude iz
-`products.json` (`description`/`specs` → `raw_text`, `images` ostaju puni
-URL-ovi) i ide na `POST /api/compare` pored postojećih 2 demo proizvoda —
-korisnik na glavnoj strani pretraži proizvod, dobijene ponude se dodaju u
-padajuće liste, i bira bilo koje dve za poređenje. Backend prepoznaje da li je
-`a`/`b` id demo proizvoda ili ceo `Product` objekat (`main._resolve`), a slike
-sa udaljenih URL-ova se za vision poziv preuzimaju preko istog SSRF-bezbednog
-fetch-a koji koristi i `/api/scraper/image` (`scraper/http.fetch_image_bytes`).
+klijentski pretvori u `Product` (`description`/`specs` → `raw_text`, `images`
+ostaju puni URL-ovi) i ide direktno na `POST /api/compare` — korisnik na
+glavnoj strani pretraži proizvod, dobijene ponude se dodaju u padajuće liste,
+i bira bilo koje dve za poređenje. Nema hardkodiranih/demo proizvoda; `a`/`b`
+u `/api/compare` su uvek ceo `Product` objekat. Slike sa udaljenih URL-ova se
+za vision poziv preuzimaju preko istog SSRF-bezbednog fetch-a koji koristi i
+`/api/scraper/image` (`scraper/http.fetch_image_bytes`).
 Ovaj router ostaje — sad služi kao napredni prikaz jednog runa (kandidati,
 skorovi, pozivi provajdera), dok glavna strana zove isti `/discover` sa
 razumnim podrazumevanim opcijama i ne prikazuje te detalje.

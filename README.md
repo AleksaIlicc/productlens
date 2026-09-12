@@ -7,26 +7,40 @@ deklarisanim tekstom. Cena, dostupnost, SKU i kategorija namerno nisu u
 fokusu — to je komercijalni sadržaj svakog kanala, ne pitanje brend
 konzistentnosti.
 
-Trenutno su hardkodirana dva izvora za isti artikal (Vichy Dermablend Corrector SPF 35, 30 ml, 35 Sand):
-
-- [Apoteka Janković](https://www.apotekajankovic.rs/vichy-dermablend-corrector-tecni-korektivni-puder-spf-35-30-ml-35-sand)
-- [Lilly Drogerie](https://www.lilly.rs/vichy-dermablend-corrector-tecni-korektivni-puder-spf-35-30-ml-35-sand-53950)
+Nema hardkodiranih demo podataka: ponude dolaze isključivo uživo, preko
+ugrađenog scraper-a (pretraga interneta + skrejpovanje, vidi
+[docs/scraping.md](docs/scraping.md)).
 
 ## Workflow
 
-1. **Podaci sa sajta** — naslov, brend i sirov skenirani tekst stranice (`raw_text`) su u `backend/data/products.json`, fotografije su skinute u `backend/data/images/<id>/`. Ovaj oblik je namerno blizak onome što bi scraper realno vratio (plain text + slike, bez ručno iseckanih polja) — kad kolega poveže pravi scraping, dovoljno je puniti isti `Product` oblik.
-2. **Podaci sa slika** — jedan vision poziv po ponudi pročita sve fotografije i vrati strukturirane podatke (tekst sa ambalaže, nijansa, zapremina, sastojci, upozorenja, tvrdnje). Rezultat se kešira u `backend/data/image_facts.cache.json`.
-3. **Poređenje** — oba skupa podataka (sajt + slike) idu u jedan poziv koji proverava tačno 7 unapred definisanih dimenzija (`product_identity`, `brand`, `shade`, `volume`, `ingredients`, `warnings`, `images_vs_text` — vidi `ComparisonField` u `backend/src/schemas.py`) sa statusom (`match` / `minor` / `mismatch` / `missing`), ozbiljnošću i objašnjenjem na srpskom. Taj fiksni skup polja je namerno zatvoren (ne slobodan tekst) da model ne bi flagovao nebitne stvari (cenu, šifru, kategoriju) niti izmišljao nova polja.
+1. **Pretraga** — na glavnoj strani se unese ime proizvoda; backend
+   (`/api/scraper/discover`) nađe najbolje strane (domaće i svetske),
+   skrejpuje ih i vrati listu ponuda (naslov, brend, sirov tekst stranice,
+   URL-ovi fotografija).
+2. **Izbor** — korisnik iz padajućih listi bira bilo koje dve ponude za
+   poređenje.
+3. **Podaci sa slika** — jedan vision poziv po ponudi pročita sve fotografije
+   (preuzete sa udaljenih URL-ova) i vrati strukturirane podatke (tekst sa
+   ambalaže, nijansa, zapremina, sastojci, upozorenja, tvrdnje). Rezultat se
+   kešira u `backend/data/image_facts.cache.json`.
+4. **Poređenje** — oba skupa podataka (sajt + slike) idu u jedan poziv koji
+   proverava tačno 7 unapred definisanih dimenzija (`product_identity`,
+   `brand`, `shade`, `volume`, `ingredients`, `warnings`, `images_vs_text` —
+   vidi `ComparisonField` u `backend/src/schemas.py`) sa statusom (`match` /
+   `minor` / `mismatch` / `missing`), ozbiljnošću i objašnjenjem na srpskom.
+   Taj fiksni skup polja je namerno zatvoren (ne slobodan tekst) da model ne
+   bi flagovao nebitne stvari (cenu, šifru, kategoriju) niti izmišljao nova
+   polja.
 
 ## Pokretanje
 
 ```sh
 # backend (http://127.0.0.1:8000)
 cd backend
-cp .env.example .env   # upisi XAI_API_KEY
+cp .env.example .env   # upiši XAI_API_KEY, FIRECRAWL_API_KEY, EXA_API_KEY
 uv run uvicorn main:app --reload --app-dir src
 
-# frontend (http://localhost:5173), proksira /api i /images na backend
+# frontend (http://localhost:5173), proksira /api na backend
 cd frontend
 npm install
 npm run dev
@@ -36,21 +50,22 @@ npm run dev
 
 | Ruta | Opis |
 | --- | --- |
-| `GET /api/products` | Lista hardkodiranih ponuda |
-| `POST /api/compare` | `{"a": "jankovic", "b": "lilly"}` → podaci sa slika + izveštaj o razlikama |
-| `GET /images/<id>/<fajl>` | Fotografije proizvoda |
+| `POST /api/compare` | `{"a": Product, "b": Product}` → podaci sa slika + izveštaj o razlikama |
+| `POST /api/scraper/discover` | pretraga + skrejpovanje po imenu proizvoda (vidi [docs/scraping.md](docs/scraping.md)) |
 
-Poređenje traje ~2 minuta (grok-4.6 je reasoning model); čitanje slika se radi samo prvi put.
+`Product` = `{id, source, url, title, brand, raw_text, images}`; `frontend/src/search.ts`
+gradi ovaj oblik od jedne ponude koju vrati `/api/scraper/discover`.
 
-## Dodavanje novog proizvoda
-
-Skini slike u `backend/data/images/<novi-id>/` i dodaj novi objekat (`id`, `source`, `url`, `title`, `brand`, `raw_text`, `images`) u listu u `backend/data/products.json`. Frontend ga automatski pokupi u dropdown-ovima.
+Poređenje traje ~2-4 minuta (grok-4.6 je reasoning model, plus preuzimanje
+udaljenih slika); čitanje slika po ponudi se kešira.
 
 ## Struktura backend-a
 
 ```
 backend/
-  src/          # aplikacioni kod (config, main, llm, products, schemas)
+  src/
+    config.py, main.py, llm.py, products.py, schemas.py   # aplikacioni kod
+    scraper/                                               # pretraga + skrejpovanje (izolovano, vidi docs/scraping.md)
   tests/        # manuelna provera konekcije ka xAI API-ju
-  data/         # products.json, keš pročitanih slika, fotografije proizvoda
+  data/         # keš pročitanih slika i scraper runova
 ```
