@@ -9,7 +9,6 @@ class ImageFinding(BaseModel):
     image: str
     role: str
     visible_text: list[str]
-    claims: list[str]
     notes: str
 
 
@@ -19,12 +18,27 @@ class ImageFacts(BaseModel):
     brand: str
     shade: str
     volume: str
-    spf: str
+    ingredients: list[str]
+    warnings: list[str]
     claims: list[str]
 
 
+# The exact set of dimensions this tool audits. Fixed on purpose: price,
+# availability, SKU, category etc. don't belong to brand-content consistency
+# and a closed enum keeps the model from flagging noise outside this scope.
+ComparisonField = Literal[
+    "product_identity",
+    "brand",
+    "shade",
+    "volume",
+    "ingredients",
+    "warnings",
+    "images_vs_text",
+]
+
+
 class FieldComparison(BaseModel):
-    field: str
+    field: ComparisonField
     origin: Literal["web", "image", "both"]
     value_a: str
     value_b: str

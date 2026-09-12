@@ -4,10 +4,7 @@ export type Product = {
   url: string;
   title: string;
   brand: string;
-  price: string;
-  availability: string;
-  specs: Record<string, string>;
-  sections: Record<string, string>;
+  raw_text: string;
   images: string[];
 };
 
@@ -15,7 +12,6 @@ export type ImageFinding = {
   image: string;
   role: string;
   visible_text: string[];
-  claims: string[];
   notes: string;
 };
 
@@ -25,15 +21,27 @@ export type ImageFacts = {
   brand: string;
   shade: string;
   volume: string;
-  spf: string;
+  ingredients: string[];
+  warnings: string[];
   claims: string[];
 };
 
 export type Status = 'match' | 'minor' | 'mismatch' | 'missing';
 export type Severity = 'info' | 'low' | 'medium' | 'high';
 
+// The fixed set of dimensions the backend audits (mirrors ComparisonField in
+// schemas.py) — price/availability/SKU/category are intentionally out of scope.
+export type ComparisonField =
+  | 'product_identity'
+  | 'brand'
+  | 'shade'
+  | 'volume'
+  | 'ingredients'
+  | 'warnings'
+  | 'images_vs_text';
+
 export type FieldComparison = {
-  field: string;
+  field: ComparisonField;
   origin: 'web' | 'image' | 'both';
   value_a: string;
   value_b: string;
