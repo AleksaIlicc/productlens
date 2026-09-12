@@ -29,9 +29,31 @@ type Digest = {
   photos: { url: string; source: string }[];
 };
 
+const COUNTERS: [keyof Counts, string][] = [
+  ['shops', 'Shops seen'],
+  ['candidates', 'Candidates'],
+  ['pages', 'Pages read'],
+  ['photos', 'Photos found'],
+  ['listings_count', 'Channels audited'],
+];
+
+type Counts = {
+  shops: number;
+  candidates: number;
+  pages: number;
+  photos: number;
+  listings_count: number;
+};
+
 /** Fold the event stream into the shapes this screen draws. */
 function digest(events: JobEvent[]): Digest {
-  const counters = { shops: 0, candidates: 0, pages: 0, photos: 0 };
+  const counts: Counts = {
+    shops: 0,
+    candidates: 0,
+    pages: 0,
+    photos: 0,
+    listings_count: 0,
+  };
   const sources = new Map<string, Source>();
   const photos = new Map<string, string>();
   let active = 0;
@@ -41,11 +63,10 @@ function digest(events: JobEvent[]): Digest {
     if (index > active) active = index;
     const data = event.data;
 
-    if (typeof data.shops === 'number') counters.shops = data.shops;
-    if (typeof data.candidates === 'number')
-      counters.candidates = data.candidates;
-    if (typeof data.pages === 'number') counters.pages = data.pages;
-    if (typeof data.photos === 'number') counters.photos = data.photos;
+    for (const [key] of COUNTERS) {
+      const value = data[key];
+      if (typeof value === 'number') counts[key] = value;
+    }
 
     // Keyed by URL, not domain: one shop can contribute two product pages.
     for (const target of data.targets ?? []) {
@@ -71,12 +92,9 @@ function digest(events: JobEvent[]): Digest {
 
   return {
     active,
-    counters: [
-      { label: 'Shops seen', value: counters.shops },
-      { label: 'Candidates', value: counters.candidates },
-      { label: 'Pages read', value: counters.pages },
-      { label: 'Photos found', value: counters.photos },
-    ],
+    counters: COUNTERS.filter(([key]) => counts[key] > 0).map(
+      ([key, label]) => ({ label, value: counts[key] }),
+    ),
     sources: [...sources.values()],
     photos: [...photos].map(([url, source]) => ({ url, source })),
   };
@@ -143,12 +161,14 @@ function StageRail({ active }: { active: number }) {
 }
 
 export default function RunView({
-  query,
+  title,
+  eyebrow,
   events,
   elapsedMs,
   onCancel,
 }: {
-  query: string;
+  title: string;
+  eyebrow: string;
   events: JobEvent[];
   elapsedMs: number;
   onCancel: () => void;
@@ -172,9 +192,9 @@ export default function RunView({
     <div className="rise">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="min-w-0">
-          <Eyebrow>Running</Eyebrow>
+          <Eyebrow>{eyebrow}</Eyebrow>
           <h1 className="mt-2.5 truncate text-2xl font-extrabold tracking-tight text-ink sm:text-3xl">
-            {query}
+            {title}
           </h1>
         </div>
         <div className="flex items-center gap-4">
@@ -195,19 +215,21 @@ export default function RunView({
         </div>
 
         <div className="min-w-0">
-          <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-line bg-line sm:grid-cols-4">
-            {counters.map((counter) => (
-              <div key={counter.label} className="bg-paper px-4 py-3">
-                <dt className="eyebrow text-ink-50">{counter.label}</dt>
-                <dd className="tnum mt-1 text-xl font-extrabold text-ink">
-                  {counter.value || '–'}
-                </dd>
-              </div>
-            ))}
-          </dl>
+          {counters.length > 0 && (
+            <dl className="mb-6 grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-line bg-line sm:grid-cols-4">
+              {counters.map((counter) => (
+                <div key={counter.label} className="bg-paper px-4 py-3">
+                  <dt className="eyebrow text-ink-50">{counter.label}</dt>
+                  <dd className="tnum mt-1 text-xl font-extrabold text-ink">
+                    {counter.value}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          )}
 
           {sources.length > 0 && (
-            <div className="mt-6">
+            <div className="mb-6">
               <Eyebrow tone="muted">Listings</Eyebrow>
               <div className="mt-2.5 flex flex-wrap gap-2">
                 {sources.map((source) => (
@@ -227,7 +249,7 @@ export default function RunView({
           )}
 
           {photos.length > 0 && (
-            <div className="mt-6">
+            <div className="mb-6">
               <Eyebrow tone="muted">
                 Packaging photos being read ({photos.length})
               </Eyebrow>
@@ -245,7 +267,7 @@ export default function RunView({
             </div>
           )}
 
-          <div className="mt-6">
+          <div>
             <Eyebrow tone="muted">Activity</Eyebrow>
             <div
               ref={log}

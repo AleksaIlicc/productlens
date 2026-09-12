@@ -1,19 +1,17 @@
 import { useState } from 'react';
 import type {
-  AnalyzeResult,
+  AnalysedListing,
+  CompareResponse,
   ComparisonField,
   FieldComparison,
-  ImageFacts,
-  Product,
+  RunStats,
   Severity,
 } from '../api';
 import {
   card,
   clock,
   Eyebrow,
-  field as fieldClass,
   ghostButton,
-  primaryButton,
   SeverityTag,
   StatusChip,
   Thumb,
@@ -47,15 +45,26 @@ const byImportance = (a: FieldComparison, b: FieldComparison) =>
   STATUS_RANK[b.status] - STATUS_RANK[a.status] ||
   SEVERITY_RANK[b.severity] - SEVERITY_RANK[a.severity];
 
+function LabelChip({ label, tone }: { label: string; tone: 'ink' | 'bad' }) {
+  return (
+    <span
+      className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-[11px] font-bold ${
+        tone === 'bad' ? 'bg-bad text-cream' : 'bg-ink text-cream'
+      }`}
+    >
+      {label}
+    </span>
+  );
+}
+
 function Finding({
   finding,
-  a,
-  b,
+  shops,
 }: {
   finding: FieldComparison;
-  a: string;
-  b: string;
+  shops: Map<string, string>;
 }) {
+  const flagged = new Set(finding.flagged);
   return (
     <li className="p-5">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
@@ -71,19 +80,32 @@ function Finding({
         </span>
       </div>
 
-      <div className="mt-3.5 grid gap-2 sm:grid-cols-2">
-        {[
-          [a, finding.value_a],
-          [b, finding.value_b],
-        ].map(([source, value]) => (
-          <div key={source} className="rounded border border-line bg-cream p-3">
-            <p className="eyebrow truncate text-ink-50">{source}</p>
-            <p className="mt-1.5 text-sm leading-snug text-ink">
-              {value || '—'}
-            </p>
-          </div>
-        ))}
-      </div>
+      <ul className="mt-3.5 divide-y divide-line overflow-hidden rounded border border-line">
+        {finding.values.map((value) => {
+          const odd = flagged.has(value.listing);
+          return (
+            <li
+              key={value.listing}
+              className={`flex items-start gap-3 px-3 py-2.5 ${
+                odd ? 'border-l-2 border-l-bad bg-bad-bg/50' : 'bg-cream'
+              }`}
+            >
+              <LabelChip label={value.listing} tone={odd ? 'bad' : 'ink'} />
+              <span className="w-32 shrink-0 truncate font-mono text-[11px] text-ink-50">
+                {shops.get(value.listing) ?? ''}
+              </span>
+              <span className="min-w-0 flex-1 text-[13px] leading-snug text-ink">
+                {value.value || '—'}
+              </span>
+              {odd && (
+                <span className="shrink-0 text-[10px] font-bold tracking-wide text-bad uppercase">
+                  issue
+                </span>
+              )}
+            </li>
+          );
+        })}
+      </ul>
 
       <p className="mt-3.5 text-[13px] leading-relaxed text-ink-70">
         {finding.explanation}
@@ -92,15 +114,8 @@ function Finding({
   );
 }
 
-function ChannelCard({
-  product,
-  facts,
-  label,
-}: {
-  product: Product;
-  facts: ImageFacts;
-  label: string;
-}) {
+function ChannelCard({ listing }: { listing: AnalysedListing }) {
+  const { product, facts, label } = listing;
   const read: [string, string][] = [
     ['Name', facts.product_name],
     ['Shade', facts.shade],
@@ -110,9 +125,7 @@ function ChannelCard({
     <article className={`${card} overflow-hidden`}>
       <header className="border-b border-line p-4">
         <div className="flex items-center justify-between gap-3">
-          <span className="inline-flex h-5 w-5 items-center justify-center rounded bg-ink text-[11px] font-bold text-cream">
-            {label}
-          </span>
+          <LabelChip label={label} tone="ink" />
           <a
             href={product.url}
             target="_blank"
@@ -153,27 +166,24 @@ function ChannelCard({
 
       <details className="border-t border-line">
         <summary className="cursor-pointer px-4 py-3 text-[13px] font-semibold text-ink-70 hover:text-ink">
-          What the model read from {facts.per_image.length} photos
+          What the model read from {facts.per_image.length} photo
+          {facts.per_image.length === 1 ? '' : 's'}
         </summary>
         <div className="space-y-3 px-4 pb-4">
-          {facts.ingredients.length > 0 && (
-            <p className="text-[12px] leading-relaxed text-ink-70">
-              <span className="font-semibold text-ink">Ingredients:</span>{' '}
-              {facts.ingredients.join(' · ')}
-            </p>
-          )}
-          {facts.warnings.length > 0 && (
-            <p className="text-[12px] leading-relaxed text-ink-70">
-              <span className="font-semibold text-ink">Warnings:</span>{' '}
-              {facts.warnings.join(' · ')}
-            </p>
-          )}
-          {facts.claims.length > 0 && (
-            <p className="text-[12px] leading-relaxed text-ink-70">
-              <span className="font-semibold text-ink">Claims:</span>{' '}
-              {facts.claims.join(' · ')}
-            </p>
-          )}
+          {(
+            [
+              ['Ingredients', facts.ingredients],
+              ['Warnings', facts.warnings],
+              ['Claims', facts.claims],
+            ] as [string, string[]][]
+          )
+            .filter(([, values]) => values.length > 0)
+            .map(([key, values]) => (
+              <p key={key} className="text-[12px] leading-relaxed text-ink-70">
+                <span className="font-semibold text-ink">{key}:</span>{' '}
+                {values.join(' · ')}
+              </p>
+            ))}
           {facts.per_image.map((finding) => (
             <div key={finding.image} className="flex gap-3">
               <Thumb
@@ -207,95 +217,25 @@ function ChannelCard({
   );
 }
 
-function PairPicker({
-  products,
-  pair,
-  onCompare,
-}: {
-  products: Product[];
-  pair: [string, string];
-  onCompare: (a: Product, b: Product) => void;
-}) {
-  const [ids, setIds] = useState<[string, string]>(pair);
-  const pick = (id: string) => products.find((p) => p.id === id);
-  const [a, b] = [pick(ids[0]), pick(ids[1])];
-  const changed = ids[0] !== pair[0] || ids[1] !== pair[1];
-  const same = ids[0] === ids[1];
-
-  return (
-    <div className={`${card} mt-6 flex flex-wrap items-end gap-3 p-4`}>
-      {([0, 1] as const).map((slot) => (
-        <label key={slot} className="min-w-[14rem] flex-1">
-          <span className="eyebrow text-ink-50">
-            {slot === 0 ? 'Channel A' : 'Channel B'}
-          </span>
-          <select
-            value={ids[slot]}
-            onChange={(e) => {
-              const next: [string, string] = [...ids];
-              next[slot] = e.target.value;
-              setIds(next);
-            }}
-            className={`${fieldClass} mt-1.5`}
-          >
-            {products.map((product) => (
-              <option key={product.id} value={product.id}>
-                {product.source}
-                {product.title ? ` — ${product.title}` : ''}
-              </option>
-            ))}
-          </select>
-        </label>
-      ))}
-      <button
-        type="button"
-        disabled={same || !changed || !a || !b}
-        onClick={() => a && b && onCompare(a, b)}
-        className={ghostButton}
-      >
-        {same ? 'Pick two shops' : 'Compare this pair'}
-      </button>
-    </div>
-  );
-}
-
 export default function ReportView({
+  query,
   result,
-  onCompare,
+  stats,
+  onChangeSelection,
   onReset,
 }: {
-  result: AnalyzeResult;
-  onCompare: (a: Product, b: Product) => void;
+  query: string;
+  result: CompareResponse;
+  stats: RunStats | null;
+  onChangeSelection: () => void;
   onReset: () => void;
 }) {
   const [showMatches, setShowMatches] = useState(false);
-  const compared = result.comparison;
+  const { listings, comparison } = result;
+  const shops = new Map(
+    listings.map((listing) => [listing.label, listing.product.source]),
+  );
 
-  if (!compared) {
-    return (
-      <div className="rise max-w-2xl">
-        <Eyebrow>No report</Eyebrow>
-        <h1 className="mt-3 text-3xl font-extrabold tracking-tight text-ink">
-          Not enough listings to compare.
-        </h1>
-        <p className="mt-3 text-[15px] leading-relaxed text-ink-70">
-          {result.products.length} readable listing
-          {result.products.length === 1 ? '' : 's'} came back for “
-          {result.query}”. A comparison needs two different shops — try a more
-          specific product name, including the brand and the variant.
-        </p>
-        <button
-          type="button"
-          onClick={onReset}
-          className={`${primaryButton} mt-6`}
-        >
-          New search
-        </button>
-      </div>
-    );
-  }
-
-  const { a, b, image_facts_a, image_facts_b, comparison } = compared;
   const flagged = comparison.fields.filter((f) => f.status !== 'match');
   const high = flagged.filter((f) => f.severity === 'high').length;
   const shown = (showMatches ? comparison.fields : flagged)
@@ -310,29 +250,35 @@ export default function ReportView({
           <h1 className="mt-3 text-3xl leading-tight font-extrabold tracking-tight text-ink sm:text-4xl">
             {flagged.length
               ? `${flagged.length} of ${comparison.fields.length} checks flagged.`
-              : 'Both channels agree on every check.'}
+              : 'Every channel agrees on every check.'}
           </h1>
           <p className="mt-3 text-[15px] leading-relaxed text-ink-70">
             {comparison.verdict}
           </p>
         </div>
-        <button type="button" onClick={onReset} className={ghostButton}>
-          New search
-        </button>
+        <div className="flex gap-2.5">
+          <button
+            type="button"
+            onClick={onChangeSelection}
+            className={ghostButton}
+          >
+            Change selection
+          </button>
+          <button type="button" onClick={onReset} className={ghostButton}>
+            New search
+          </button>
+        </div>
       </div>
 
       <dl className="mt-7 grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-line bg-line sm:grid-cols-4">
         {[
-          ['Compared', `${a.source} vs ${b.source}`],
+          ['Channels', `${listings.length}`],
           [
             'Same product',
-            comparison.same_product ? 'Yes' : 'No — different item',
+            comparison.same_product ? 'Yes' : 'No — not all the same',
           ],
           ['High severity', `${high}`],
-          [
-            'Run time',
-            result.run ? clock(result.run.elapsed_ms) : 'this session',
-          ],
+          ['Search time', stats ? clock(stats.elapsed_ms) : '—'],
         ].map(([label, value]) => (
           <div key={label} className="bg-paper px-4 py-3">
             <dt className="eyebrow text-ink-50">{label}</dt>
@@ -350,10 +296,15 @@ export default function ReportView({
         ))}
       </dl>
 
+      <p className="mt-3 text-xs text-ink-50">
+        “{query}” ·{' '}
+        {listings.map((l) => `${l.label} ${l.product.source}`).join('  ·  ')}
+      </p>
+
       <section className="mt-10">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-lg font-extrabold tracking-tight text-ink">
-            Findings
+            Differences
           </h2>
           <label className="flex cursor-pointer items-center gap-2 text-[13px] text-ink-70">
             <input
@@ -369,18 +320,15 @@ export default function ReportView({
         {shown.length ? (
           <ul className={`${card} mt-3 divide-y divide-line`}>
             {shown.map((finding) => (
-              <Finding
-                key={finding.field}
-                finding={finding}
-                a={a.source}
-                b={b.source}
-              />
+              <Finding key={finding.field} finding={finding} shops={shops} />
             ))}
           </ul>
         ) : (
-          <p
-            className={`${card} mt-3 p-5 text-sm text-ink-70`}
-          >{`Nothing was flagged across ${comparison.fields.length} dimensions. Tick the box above to see each one.`}</p>
+          <p className={`${card} mt-3 p-5 text-sm text-ink-70`}>
+            Nothing differs across {listings.length} channels on any of the{' '}
+            {comparison.fields.length} dimensions. Tick the box above to see
+            each one.
+          </p>
         )}
       </section>
 
@@ -389,41 +337,26 @@ export default function ReportView({
           Evidence
         </h2>
         <div className="mt-3 grid gap-4 lg:grid-cols-2">
-          <ChannelCard product={a} facts={image_facts_a} label="A" />
-          <ChannelCard product={b} facts={image_facts_b} label="B" />
+          {listings.map((listing) => (
+            <ChannelCard key={listing.product.id} listing={listing} />
+          ))}
         </div>
       </section>
 
-      {result.products.length > 2 && (
-        <section className="mt-10">
-          <h2 className="text-lg font-extrabold tracking-tight text-ink">
-            Compare another pair
-          </h2>
-          <p className="mt-1.5 text-[13px] text-ink-70">
-            {result.products.length} listings came back from this search.
-          </p>
-          <PairPicker
-            products={result.products}
-            pair={[a.id, b.id]}
-            onCompare={onCompare}
-          />
-        </section>
-      )}
-
-      {result.run && (
+      {stats && (
         <details className={`${card} mt-10 p-5`}>
           <summary className="cursor-pointer text-[13px] font-bold text-ink-70 hover:text-ink">
             Run details
           </summary>
           <dl className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
             {[
-              ['Candidates', `${result.run.candidates}`],
+              ['Candidates', `${stats.candidates}`],
               [
                 'Pages scraped',
-                `${result.run.scraped_ok} ok / ${result.run.scraped_failed} failed`,
+                `${stats.scraped_ok} ok / ${stats.scraped_failed} failed`,
               ],
-              ['Photos found', `${result.run.images}`],
-              ['Run id', result.run.run_id],
+              ['Photos found', `${stats.images}`],
+              ['Run id', stats.run_id],
             ].map(([label, value]) => (
               <div key={label}>
                 <dt className="eyebrow text-ink-50">{label}</dt>
@@ -433,17 +366,17 @@ export default function ReportView({
               </div>
             ))}
           </dl>
-          {result.run.queries_used.length > 0 && (
+          {stats.queries_used.length > 0 && (
             <div className="mt-4">
               <p className="eyebrow text-ink-50">Queries used</p>
               <p className="mt-1 font-mono text-[12px] text-ink-70">
-                {result.run.queries_used.join('  ·  ')}
+                {stats.queries_used.join('  ·  ')}
               </p>
             </div>
           )}
-          {result.run.warnings.length > 0 && (
+          {stats.warnings.length > 0 && (
             <ul className="mt-4 space-y-1.5">
-              {result.run.warnings.map((warning) => (
+              {stats.warnings.map((warning) => (
                 <li key={warning} className="text-[12px] text-warn">
                   {warning}
                 </li>

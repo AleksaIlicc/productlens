@@ -125,6 +125,10 @@ class ScrapedOffer(BaseModel):
     images: list[str] = Field(default_factory=list)
     specs: dict[str, str] = Field(default_factory=dict)
     description: str = ""
+    # Shade / size tokens read off the page; on shops whose description is
+    # boilerplate this is the only text that states the variant.
+    variant_hints: list[str] = Field(default_factory=list)
+    gtin: str = ""
     markdown: str = ""
 
 

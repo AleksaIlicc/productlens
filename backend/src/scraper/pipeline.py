@@ -348,6 +348,8 @@ def _build_payload(
             images=gallery_urls(page.images, get_scraper_settings().max_images),
             specs=page.facts.specs,
             description=page.facts.description,
+            variant_hints=page.facts.variant_hints,
+            gtin=page.facts.gtin,
             markdown=page.markdown,
         )
         for page in ok_pages

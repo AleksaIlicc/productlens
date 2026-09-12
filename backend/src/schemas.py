@@ -35,11 +35,24 @@ ComparisonField = Literal[
 ]
 
 
+class ListingValue(BaseModel):
+    """What one listing states for one dimension.
+
+    `listing` is the short label ("A", "B", ...) the audit prompt was given,
+    not a domain — two pages can come from the same shop.
+    """
+
+    listing: str
+    value: str
+
+
 class FieldComparison(BaseModel):
     field: ComparisonField
     origin: Literal["web", "image", "both"]
-    value_a: str
-    value_b: str
+    values: list[ListingValue]
+    # Labels carrying the problem this row describes — the listings that would
+    # need fixing. Empty when nothing is wrong.
+    flagged: list[str]
     status: Literal["match", "minor", "mismatch", "missing"]
     severity: Literal["info", "low", "medium", "high"]
     explanation: str
@@ -51,14 +64,16 @@ class Comparison(BaseModel):
     fields: list[FieldComparison]
 
 
+class AnalysedListing(BaseModel):
+    label: str
+    product: Product
+    facts: ImageFacts
+
+
 class CompareRequest(BaseModel):
-    a: Product
-    b: Product
+    listings: list[Product]
 
 
 class CompareResponse(BaseModel):
-    a: Product
-    b: Product
-    image_facts_a: ImageFacts
-    image_facts_b: ImageFacts
+    listings: list[AnalysedListing]
     comparison: Comparison

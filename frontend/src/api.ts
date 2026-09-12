@@ -37,11 +37,17 @@ export type ComparisonField =
   | 'warnings'
   | 'images_vs_text';
 
+/** What one listing states for one dimension, keyed by its label (A, B, …). */
+export type ListingValue = {
+  listing: string;
+  value: string;
+};
+
 export type FieldComparison = {
   field: ComparisonField;
   origin: 'web' | 'image' | 'both';
-  value_a: string;
-  value_b: string;
+  values: ListingValue[];
+  flagged: string[];
   status: Status;
   severity: Severity;
   explanation: string;
@@ -53,11 +59,14 @@ export type Comparison = {
   fields: FieldComparison[];
 };
 
+export type AnalysedListing = {
+  label: string;
+  product: Product;
+  facts: ImageFacts;
+};
+
 export type CompareResponse = {
-  a: Product;
-  b: Product;
-  image_facts_a: ImageFacts;
-  image_facts_b: ImageFacts;
+  listings: AnalysedListing[];
   comparison: Comparison;
 };
 
@@ -83,6 +92,7 @@ export type JobEvent = {
     candidates?: number;
     pages?: number;
     photos?: number;
+    listings_count?: number;
     // One page, as it lands.
     domain?: string;
     url?: string;
@@ -96,8 +106,7 @@ export type JobEvent = {
     targets?: { domain: string; url: string }[];
     domains?: string[];
     queries?: string[];
-    a?: string;
-    b?: string;
+    listings?: string[];
   };
 };
 
@@ -116,7 +125,7 @@ export type AnalyzeResult = {
   query: string;
   run: RunStats | null;
   products: Product[];
-  pair: string[];
+  suggested: string[];
   comparison: CompareResponse | null;
 };
 
@@ -151,11 +160,11 @@ const post = <T>(url: string, body: unknown) =>
     body: JSON.stringify(body),
   });
 
-export const startAnalysis = (query: string) =>
+export const startSearch = (query: string) =>
   post<{ job_id: string }>('/api/analyze', { query });
 
-export const startComparison = (a: Product, b: Product) =>
-  post<{ job_id: string }>('/api/analyze/compare', { a, b });
+export const startComparison = (listings: Product[]) =>
+  post<{ job_id: string }>('/api/analyze/compare', { listings });
 
 export const fetchJob = (jobId: string, cursor: number) =>
   request<JobState>(`/api/analyze/${jobId}?cursor=${cursor}`);

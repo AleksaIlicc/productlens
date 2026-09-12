@@ -1,32 +1,45 @@
-// Drives one analysis job: kick it off, then poll for whatever the backend
-// has reported since the last cursor. Events accumulate so the run screen can
-// replay the whole pipeline, not just the latest line.
+// Drives the run in two halves: a search job, then — once the user has picked
+// which channels matter — a comparison job. Both are polled the same way, and
+// events accumulate so the run screen can replay the whole pipeline.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  type AnalyzeResult,
+  type CompareResponse,
   fetchJob,
   type JobEvent,
   type Product,
-  startAnalysis,
+  type RunStats,
   startComparison,
+  startSearch,
 } from './api';
 
 const POLL_MS = 700;
 
-export type RunPhase = 'idle' | 'running' | 'done' | 'error';
+export type RunPhase =
+  | 'idle'
+  | 'searching'
+  | 'selecting'
+  | 'comparing'
+  | 'done'
+  | 'error';
+
+type JobKind = 'search' | 'compare';
 
 export type Run = {
   phase: RunPhase;
   query: string;
   events: JobEvent[];
   elapsedMs: number;
-  result: AnalyzeResult | null;
-  /** Listings from the last full search, kept across re-comparisons. */
-  pool: Product[];
+  /** Everything the search turned up, the pool the picker works from. */
+  products: Product[];
+  suggested: string[];
+  stats: RunStats | null;
+  comparison: CompareResponse | null;
   error: string;
-  analyze: (query: string) => void;
-  compare: (a: Product, b: Product, query: string) => void;
+  search: (query: string) => void;
+  compare: (listings: Product[]) => void;
+  backToSelection: () => void;
+  retry: () => void;
   reset: () => void;
 };
 
@@ -35,26 +48,29 @@ export function useRun(): Run {
   const [query, setQuery] = useState('');
   const [events, setEvents] = useState<JobEvent[]>([]);
   const [elapsedMs, setElapsed] = useState(0);
-  const [result, setResult] = useState<AnalyzeResult | null>(null);
-  const [pool, setPool] = useState<Product[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [suggested, setSuggested] = useState<string[]>([]);
+  const [stats, setStats] = useState<RunStats | null>(null);
+  const [comparison, setComparison] = useState<CompareResponse | null>(null);
   const [error, setError] = useState('');
-  const jobId = useRef<string | null>(null);
+  // The job is state, not a ref: the poll loop must not start until the id of
+  // the job it is meant to follow exists, or it polls the previous one.
+  const [job, setJob] = useState<{ id: string; kind: JobKind } | null>(null);
+  const lastSelection = useRef<Product[]>([]);
 
-  // Polling and the ticking clock both hang off this job id.
   useEffect(() => {
-    if (phase !== 'running') return;
+    if (!job) return;
     let stopped = false;
     let inFlight = false;
     let cursor = 0;
 
     const tick = async () => {
-      const id = jobId.current;
       // A poll slower than the interval would otherwise re-request events it
       // has already asked for, and append them twice.
-      if (!id || stopped || inFlight) return;
+      if (stopped || inFlight) return;
       inFlight = true;
       try {
-        const state = await fetchJob(id, cursor);
+        const state = await fetchJob(job.id, cursor);
         if (stopped) return;
         cursor = state.cursor;
         setElapsed(state.elapsed_ms);
@@ -66,11 +82,19 @@ export function useRun(): Run {
           });
         }
         if (state.status === 'done') {
-          setResult(state.result);
-          // Only a full search carries run stats; a re-compare returns just
-          // its own pair, so it must not shrink the pool.
-          if (state.result?.run) setPool(state.result.products);
-          setPhase('done');
+          const result = state.result;
+          if (job.kind === 'search') {
+            setProducts(result?.products ?? []);
+            setSuggested(result?.suggested ?? []);
+            setStats(result?.run ?? null);
+            setPhase('selecting');
+          } else if (result?.comparison) {
+            setComparison(result.comparison);
+            setPhase('done');
+          } else {
+            setError('The audit finished without producing a report.');
+            setPhase('error');
+          }
         } else if (state.status === 'error') {
           setError(state.error || 'The run failed.');
           setPhase('error');
@@ -90,19 +114,22 @@ export function useRun(): Run {
       stopped = true;
       clearInterval(timer);
     };
-  }, [phase]);
+  }, [job]);
 
   const begin = useCallback(
-    async (label: string, start: () => Promise<{ job_id: string }>) => {
-      setQuery(label);
+    async (
+      kind: JobKind,
+      phaseName: RunPhase,
+      start: () => Promise<{ job_id: string }>,
+    ) => {
+      setJob(null);
       setEvents([]);
       setElapsed(0);
-      setResult(null);
       setError('');
-      setPhase('running');
+      setPhase(phaseName);
       try {
         const { job_id } = await start();
-        jobId.current = job_id;
+        setJob({ id: job_id, kind });
       } catch (err) {
         setError((err as Error).message);
         setPhase('error');
@@ -111,23 +138,48 @@ export function useRun(): Run {
     [],
   );
 
-  const analyze = useCallback(
-    (next: string) => void begin(next, () => startAnalysis(next)),
+  const search = useCallback(
+    (next: string) => {
+      setQuery(next);
+      setProducts([]);
+      setComparison(null);
+      void begin('search', 'searching', () => startSearch(next));
+    },
     [begin],
   );
 
   const compare = useCallback(
-    (a: Product, b: Product, label: string) =>
-      void begin(label, () => startComparison(a, b)),
+    (listings: Product[]) => {
+      lastSelection.current = listings;
+      setComparison(null);
+      void begin('compare', 'comparing', () => startComparison(listings));
+    },
     [begin],
   );
 
+  const backToSelection = useCallback(() => {
+    setJob(null);
+    setPhase('selecting');
+    setEvents([]);
+  }, []);
+
+  // Whichever half failed is the one worth retrying.
+  const retry = useCallback(() => {
+    if (lastSelection.current.length >= 2 && products.length) {
+      compare(lastSelection.current);
+    } else if (query) {
+      search(query);
+    }
+  }, [compare, products.length, query, search]);
+
   const reset = useCallback(() => {
-    jobId.current = null;
+    setJob(null);
     setPhase('idle');
     setEvents([]);
-    setResult(null);
-    setPool([]);
+    setProducts([]);
+    setSuggested([]);
+    setStats(null);
+    setComparison(null);
     setError('');
     setQuery('');
   }, []);
@@ -137,11 +189,15 @@ export function useRun(): Run {
     query,
     events,
     elapsedMs,
-    result,
-    pool,
+    products,
+    suggested,
+    stats,
+    comparison,
     error,
-    analyze,
+    search,
     compare,
+    backToSelection,
+    retry,
     reset,
   };
 }

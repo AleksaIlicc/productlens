@@ -16,13 +16,15 @@ ugrađenog scraper-a (pretraga interneta + skrejpovanje, vidi
 
 ## Workflow
 
-Korisnik unese jedno ime proizvoda i gleda kako run teče; ostalo ide samo.
+Korisnik unese jedno ime proizvoda i gleda kako run teče.
 
 1. **Pretraga i skrejpovanje** — backend nađe najbolje strane (domaće i
-   svetske), skrejpuje ih i izvuče tekst, specifikaciju i galeriju.
-2. **Izbor para** — automatski se uzima najbolja ponuda i najbolja ponuda iz
-   druge prodavnice, po mogućstvu iz drugog regiona (tu tekst najčešće
-   odluta). U izveštaju može da se izabere bilo koji drugi par.
+   svetske), skrejpuje ih (do 10) i izvuče tekst, specifikaciju i galeriju.
+   Bira se prvo po jedna strana po prodavnici, pa tek onda druga iz iste —
+   poređenje je između kanala, pa je nova prodavnica uvek vrednija.
+2. **Izbor kanala** — korisnik čekira koje ponude hoće da uporedi (2 do 8);
+   par se ne nameće. Unapred su čekirane najbolje ponude iz različitih
+   prodavnica i, ako postoji, iz različitih regiona.
 3. **Podaci sa slika** — fotografije se preuzimaju sa udaljenih URL-ova; ako
    ih ima 3 ili više, jeftiniji/brži model (`xai_filter_model`) prvo odbaci
    one koje ne prikazuju baš taj proizvod (stranica zna da povuče i slike
@@ -30,7 +32,7 @@ Korisnik unese jedno ime proizvoda i gleda kako run teče; ostalo ide samo.
    pročita preostale fotografije i vrati strukturirane podatke (tekst sa
    ambalaže, nijansa, zapremina, sastojci, upozorenja, tvrdnje). Rezultat se
    kešira u `backend/data/image_facts.cache.json`.
-4. **Poređenje** — oba skupa podataka (sajt + slike) idu u jedan poziv koji
+4. **Poređenje** — svi izabrani kanali (sajt + slike) idu u jedan poziv koji
    proverava tačno 6 unapred definisanih dimenzija (`product_identity`,
    `shade`, `volume`, `ingredients`, `warnings`, `images_vs_text` —
    vidi `ComparisonField` u `backend/src/schemas.py`) sa statusom (`match` /
@@ -38,8 +40,14 @@ Korisnik unese jedno ime proizvoda i gleda kako run teče; ostalo ide samo.
    skup polja je namerno zatvoren (ne slobodan tekst) da model ne bi flagovao
    nebitne stvari (cenu, šifru, kategoriju) niti izmišljao nova polja.
 
-Ceo run traje ~2-4 minuta, pa ne ide kao jedan dug zahtev nego kao posao:
-`POST /api/analyze` vrati `job_id`, a frontend povlači `GET /api/analyze/{id}`
+   Svaka dimenzija vraća po jednu vrednost za SVAKI kanal (`values`, vezano
+   za labelu A/B/C/...) plus `flagged` — koji kanali nose problem, tj. šta bi
+   neko morao da ispravi. Kod `images_vs_text` to je svaka ponuda čije slike
+   protivreče njenom sopstvenom tekstu, ne manjina.
+
+Pretraga traje ~15-60 s, a audit ~2-5 minuta (raste sa brojem kanala), pa
+nijedno ne ide kao jedan dug zahtev nego kao posao: `POST` vrati `job_id`, a
+frontend povlači `GET /api/analyze/{id}`
 i prikazuje šta se stvarno dešava (koji su sajtovi nađeni, koja strana je
 upravo pročitana, koje se fotografije trenutno gledaju). Poslovi žive u memoriji
 procesa — `uvicorn --reload` ih obriše pri svakoj izmeni backend koda.
@@ -62,8 +70,8 @@ npm run dev
 
 | Ruta | Opis |
 | --- | --- |
-| `POST /api/analyze` | `{"query": "..."}` → `{job_id}`; pokreće ceo run |
-| `POST /api/analyze/compare` | `{"a": Product, "b": Product}` → `{job_id}`; samo ponovno poređenje izabranog para |
+| `POST /api/analyze` | `{"query": "..."}` → `{job_id}`; pretraga + skrejpovanje |
+| `POST /api/analyze/compare` | `{"listings": [Product, ...]}` (2-8) → `{job_id}`; audit izabranih kanala |
 | `GET /api/analyze/{job_id}?cursor=N` | događaji od `cursor` nadalje + rezultat kad je gotovo |
 | `POST /api/compare` | isti posao kao gore, ali kao jedan blokirajući zahtev (bez progresa) |
 | `POST /api/scraper/discover` | pretraga + skrejpovanje po imenu proizvoda (vidi [docs/scraping.md](docs/scraping.md)) |
@@ -88,6 +96,6 @@ backend/
 
 frontend/src/
   App.tsx, useRun.ts, api.ts, ui.tsx   # ljuska, poll petlja, tokeni dizajna
-  views/                               # SearchView / RunView / ReportView
+  views/                               # SearchView / RunView / SelectView / ReportView
   scraper/                             # napredni scraper prikaz
 ```

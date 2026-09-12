@@ -12,7 +12,7 @@ from pydantic import BaseModel, ValidationError
 
 from config import get_settings
 from products import Product
-from schemas import Comparison, ImageFacts
+from schemas import AnalysedListing, Comparison, ImageFacts, ListingValue
 from scraper.http import fetch_image_bytes
 
 # Below this many photos there's nothing meaningful to filter — a page with
@@ -47,33 +47,44 @@ safety/allergy claim), and claims (other marketing claims, e.g. "16h",
 "SPF 35"). Use an empty string or empty list for anything not visible. Write
 in English, except for text copied verbatim from the packaging."""
 
-COMPARE_PROMPT = """You audit whether a retailer's product listing matches the
-brand's official content — a mystery shopper checking for a mislabeled shade,
-wrong volume, missing ingredients or safety warnings, and photos that don't
-match the listing text. Price, availability, SKU and category are out of
-scope: don't mention them.
+COMPARE_PROMPT = """You audit whether the same product is described
+consistently across every channel that sells it — a mystery shopper checking
+for a mislabeled shade, wrong volume, missing ingredients or safety warnings,
+and photos that don't match the listing text. Price, availability, SKU and
+category are out of scope: don't mention them.
 
-You get two listings of the same (allegedly) product: text scraped from each
-site plus facts a vision model read from each one's photos.
+You get two or more listings of the same (allegedly) product, each with a
+label (A, B, C, ...): text scraped from that site plus facts a vision model
+read from that listing's photos.
 
 Check exactly these six dimensions, one result each — no more, no fewer:
 product_identity, shade, volume, ingredients, warnings, images_vs_text.
 
 For each dimension:
-- value_a / value_b: what each listing states; "—" if not stated at all.
+- values: ONE entry per listing you were given, using that listing's exact
+  label. Never skip a listing, never invent a label. The value is what that
+  listing states, condensed; "—" if it does not state it at all.
+- flagged: the labels that carry the problem — the listings someone would
+  have to go and fix. Where one channel states something different from the
+  others, that is the odd one out. For images_vs_text it is every listing
+  whose own photos contradict its own text, however many that is. Empty when
+  nothing is wrong.
 - origin: "web", "image", or "both".
-- status: "match", "minor" (same substance, different wording), "mismatch"
-  (materially different), "missing" (stated on only one side).
+- status: "match" (all listings agree), "minor" (same substance, different
+  wording), "mismatch" (at least one is materially different), "missing"
+  (stated by some listings and not others).
 - severity: "high" if it could mislead a buyer or is a compliance risk (wrong
   shade, wrong volume, missing ingredients/warnings), "medium" for a real gap,
   "low" for a wording nuance, "info" only when you must report a match anyway.
-- explanation: what differs and why it matters, in English.
+- explanation: which listings differ and why it matters, in English. Name them
+  by label and shop, e.g. "C (lilly.rs) says 35 Sand while A and B say 30
+  Beige".
 
 If you're not sure something actually differs, mark it "match" rather than
 guessing — don't invent findings.
 
-same_product: whether this is physically the same item. verdict: a 2-3
-sentence summary, in English."""
+same_product: whether every listing is physically the same item. verdict: a
+2-3 sentence summary of where the channels disagree, in English."""
 
 IMAGE_FILTER_PROMPT = """A shop page was scraped for one product, but its
 photo gallery can include shots of a completely DIFFERENT product — a
@@ -302,34 +313,50 @@ async def extract_image_facts(
     return facts
 
 
-def _offer_payload(product: Product, facts: ImageFacts) -> dict:
+def _listing_payload(listing: AnalysedListing) -> dict:
     return {
-        "store": product.source,
-        "url": product.url,
+        "label": listing.label,
+        "store": listing.product.source,
+        "url": listing.product.url,
         "from_website": {
-            "title": product.title,
-            "text": product.raw_text,
+            "title": listing.product.title,
+            "text": listing.product.raw_text,
         },
-        "from_images": facts.model_dump(),
+        "from_images": listing.facts.model_dump(),
     }
 
 
-async def compare_products(
-    a: Product,
-    b: Product,
-    facts_a: ImageFacts,
-    facts_b: ImageFacts,
-    progress=_silent,
+def _repair_values(
+    comparison: Comparison, listings: list[AnalysedListing]
+) -> Comparison:
+    """Make every dimension carry exactly one value per listing.
+
+    Structured output gets the labels right almost always, but a dropped or
+    hallucinated label would silently misalign a whole column in the report,
+    so the set is forced back to the listings we actually sent.
+    """
+    labels = [listing.label for listing in listings]
+    known = set(labels)
+    for field in comparison.fields:
+        stated = {value.listing: value.value for value in field.values}
+        field.values = [
+            ListingValue(listing=label, value=stated.get(label, "—"))
+            for label in labels
+        ]
+        field.flagged = [label for label in field.flagged if label in known]
+    return comparison
+
+
+async def compare_listings(
+    listings: list[AnalysedListing], progress=_silent
 ) -> Comparison:
     progress(
         "audit",
-        f"Cross-checking {a.source} against {b.source}",
+        f"Cross-checking {len(listings)} listings",
         detail="identity, shade, volume, ingredients, warnings, photos vs text",
+        listings=[listing.product.source for listing in listings],
     )
-    payload = {
-        "listing_a": _offer_payload(a, facts_a),
-        "listing_b": _offer_payload(b, facts_b),
-    }
+    payload = {"listings": [_listing_payload(listing) for listing in listings]}
     completion = await _client().chat.completions.parse(
         model=get_settings().xai_model,
         messages=[
@@ -341,13 +368,14 @@ async def compare_products(
     comparison = completion.choices[0].message.parsed
     if comparison is None:
         raise RuntimeError("Model did not return a structured comparison")
+    comparison = _repair_values(comparison, listings)
 
     flagged = [f for f in comparison.fields if f.status != "match"]
     progress(
         "audit",
         f"{len(flagged)} of {len(comparison.fields)} dimensions flagged",
         detail=", ".join(f.field.replace("_", " ") for f in flagged)
-        or "both listings agree on every dimension",
+        or "every listing agrees on every dimension",
         tone="warn" if flagged else "ok",
     )
     return comparison

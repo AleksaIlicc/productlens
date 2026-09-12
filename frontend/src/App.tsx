@@ -1,38 +1,44 @@
-import type { AnalyzeResult, Product } from './api';
 import { ghostButton, primaryButton, Shell } from './ui';
 import { useRun } from './useRun';
 import ReportView from './views/ReportView';
 import RunView from './views/RunView';
 import SearchView from './views/SearchView';
-
-/** A re-compare returns only its own pair; keep the wider search pool so the
- * report's picker still offers every listing the search found. */
-function withPool(result: AnalyzeResult, pool: Product[]): AnalyzeResult {
-  const products = new Map(pool.map((product) => [product.id, product]));
-  for (const product of result.products) products.set(product.id, product);
-  return { ...result, products: [...products.values()] };
-}
+import SelectView from './views/SelectView';
 
 function App() {
   const run = useRun();
 
   return (
     <Shell>
-      {run.phase === 'idle' && <SearchView onSearch={run.analyze} />}
+      {run.phase === 'idle' && <SearchView onSearch={run.search} />}
 
-      {run.phase === 'running' && (
+      {(run.phase === 'searching' || run.phase === 'comparing') && (
         <RunView
-          query={run.query}
+          title={run.query}
+          eyebrow={run.phase === 'searching' ? 'Searching' : 'Auditing'}
           events={run.events}
           elapsedMs={run.elapsedMs}
-          onCancel={run.reset}
+          onCancel={run.phase === 'comparing' ? run.backToSelection : run.reset}
         />
       )}
 
-      {run.phase === 'done' && run.result && (
+      {run.phase === 'selecting' && (
+        <SelectView
+          query={run.query}
+          products={run.products}
+          suggested={run.suggested}
+          stats={run.stats}
+          onCompare={run.compare}
+          onReset={run.reset}
+        />
+      )}
+
+      {run.phase === 'done' && run.comparison && (
         <ReportView
-          result={withPool(run.result, run.pool)}
-          onCompare={(a, b) => run.compare(a, b, run.query)}
+          query={run.query}
+          result={run.comparison}
+          stats={run.stats}
+          onChangeSelection={run.backToSelection}
           onReset={run.reset}
         />
       )}
@@ -47,11 +53,7 @@ function App() {
             {run.error}
           </p>
           <div className="mt-6 flex gap-2.5">
-            <button
-              type="button"
-              onClick={() => run.analyze(run.query)}
-              className={primaryButton}
-            >
+            <button type="button" onClick={run.retry} className={primaryButton}>
               Try again
             </button>
             <button type="button" onClick={run.reset} className={ghostButton}>

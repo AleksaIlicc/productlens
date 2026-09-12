@@ -367,13 +367,13 @@ def pick_to_scrape(
     chosen: list[Candidate] = []
     chosen_keys: set[str] = set()
 
-    def take(pool: list[Candidate], limit: int) -> None:
+    def take(pool: list[Candidate], limit: int, cap: int) -> None:
         for candidate in pool:
             if len(chosen) >= n or limit <= 0:
                 return
             if candidate.canonical_url in chosen_keys:
                 continue
-            if per_domain.get(candidate.domain, 0) >= max_per_domain:
+            if per_domain.get(candidate.domain, 0) >= cap:
                 continue
             chosen.append(candidate)
             chosen_keys.add(candidate.canonical_url)
@@ -384,10 +384,19 @@ def pick_to_scrape(
     world = [c for c in usable if c.region == "world"]
     products_first = sorted(usable, key=lambda c: (c.page_type != "product", -c.score))
 
-    take([c for c in domestic if c.page_type == "product"] or domestic, min(min_rs, n))
+    # One page per shop first. The tool compares channels, so a second page
+    # from a shop already picked is worth less than the first page of a shop
+    # that would otherwise be left out entirely.
+    take([c for c in domestic if c.page_type == "product"] or domestic, min(min_rs, n), 1)
     take(
         [c for c in world if c.page_type == "product"] or world,
         min(min_world, max(0, n - len(chosen))),
+        1,
     )
-    take(products_first, n - len(chosen))
+    take(products_first, n - len(chosen), 1)
+
+    # Only once every distinct shop has had its turn is a second page worth a
+    # remaining slot (a shop listing two shades is a real comparison too).
+    if max_per_domain > 1:
+        take(products_first, n - len(chosen), max_per_domain)
     return chosen
