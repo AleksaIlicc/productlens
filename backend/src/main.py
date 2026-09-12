@@ -4,6 +4,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 
 from config import get_settings
+from lab.router import router as lab_router
 from llm import compare_products, extract_image_facts
 from products import BY_ID, PRODUCTS, Product
 from schemas import CompareRequest, CompareResponse
@@ -16,6 +17,7 @@ app.mount(
     StaticFiles(directory=Path(__file__).resolve().parent.parent / "data" / "images"),
     name="images",
 )
+app.include_router(lab_router)
 
 
 @app.get("/health")
